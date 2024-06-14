@@ -18,7 +18,7 @@ jobs:
             php-version: '8.1'
 
       - name: Install Composer dependencies
-        run: composer update
+        run: composer update --no-dev
 
       - name: Deploy to FTP
         run: |
