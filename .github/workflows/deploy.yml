@@ -12,6 +12,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
+      - name: Delete target directory on FTP
+        run: |
+          echo "Checking if /storage directory exists on FTP server"
+          if curl -s --ftp-ssl --user "$FTP_USERNAME:$FTP_PASSWORD" --ftp-method nocwd "ftp://$FTP_SERVER/storage" --output /dev/null; then
+            echo "Storage directory exists. Checking if /storage/classes directory exists"
+            if curl -s --ftp-ssl --user "$FTP_USERNAME:$FTP_PASSWORD" --ftp-method nocwd "ftp://$FTP_SERVER/storage/classes" --output /dev/null; then
+              echo "Classes directory exists. Deleting contents of /storage/classes directory"
+              curl --ftp-ssl --user "$FTP_USERNAME:$FTP_PASSWORD" --ftp-method nocwd -Q "MLSD /storage/classes" "ftp://$FTP_SERVER/storage/classes" | grep "^ " | awk '{print $9}' | while read filename; do
+                curl --ftp-ssl --user "$FTP_USERNAME:$FTP_PASSWORD" --ftp-method nocwd -Q "DELE /storage/classes/$filename" "ftp://$FTP_SERVER/storage/classes/$filename"
+              done
+            else
+              echo "Classes directory does not exist"
+            fi
+          else
+            echo "Storage directory does not exist"
+          fi
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+
       - name: Deploy to FTP
         run: |
           echo "Uploading files to FTP server"
