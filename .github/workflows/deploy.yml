@@ -1,4 +1,4 @@
-name: Deploy to FTP - autumn
+name: Deploy to FTP
 
 on:
   push:
@@ -12,14 +12,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Install lftp
+      - name: Deploy to FTP
         run: |
-          sudo apt-get update
-          sudo apt-get install -y lftp
-
-      - name: Deploy to FTP - autumn
-        run: |
-          lftp -c "open -u $FTP_USERNAME,$FTP_PASSWORD $FTP_SERVER; mirror --reverse --delete --verbose ./ /"
+          echo "open $FTP_SERVER
+          user $FTP_USERNAME $FTP_PASSWORD
+          binary
+          cd /
+          lcd public
+          mput *
+          bye" | ftp -n -v
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
