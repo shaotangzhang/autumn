@@ -18,7 +18,19 @@ jobs:
             php-version: '8.1'
 
       - name: Install Composer dependencies
-        run: composer update
+        run: composer update --no-dev
+
+      - name: Deploy to FTP
+        run: |
+          echo "Uploading files to FTP server"
+          find . -type f -not -path '*/\.*' | while read file; do
+            remote_path=$(echo "$file" | sed 's|^\./||')
+            curl --ftp-create-dirs -T "$file" "ftp://$FTP_USERNAME:$FTP_PASSWORD@$FTP_SERVER/$remote_path"
+          done
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
 
       - name: Delete target directory on FTP
         run: |
@@ -36,18 +48,6 @@ jobs:
           else
             echo "Storage directory does not exist"
           fi
-        env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-
-      - name: Deploy to FTP
-        run: |
-          echo "Uploading files to FTP server"
-          find . -type f -not -path '*/\.*' | while read file; do
-            remote_path=$(echo "$file" | sed 's|^\./||')
-            curl --ftp-create-dirs -T "$file" "ftp://$FTP_USERNAME:$FTP_PASSWORD@$FTP_SERVER/$remote_path"
-          done
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
