@@ -1,4 +1,4 @@
-name: Deploy to FTP
+name: Deploy to FTP - autumn
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Deploy to FTP
+      - name: Deploy to FTP - autumn
         run: |
           lftp -c "open -u $FTP_USERNAME,$FTP_PASSWORD $FTP_SERVER; mirror --reverse --delete --verbose ./public /path/to/remote/directory"
         env:
