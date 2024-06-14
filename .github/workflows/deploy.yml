@@ -9,12 +9,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Install lftp
-        run: |
-          apt-get update && apt-get install -y lftp
-
       - name: Checkout repository
         uses: actions/checkout@v2
+
+      - name: Install lftp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lftp
 
       - name: Deploy to FTP - autumn
         run: |
