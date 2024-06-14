@@ -14,13 +14,11 @@ jobs:
 
       - name: Deploy to FTP
         run: |
-          echo "open $FTP_SERVER
-          user $FTP_USERNAME $FTP_PASSWORD
-          binary
-          cd /
-          lcd ./
-          mput *
-          bye" | ftp -n -v
+          echo "Uploading files to FTP server"
+          find . -type f -not -path '*/\.*' | while read file; do
+            remote_path=$(echo "$file" | sed 's|^\./||')
+            curl --ftp-create-dirs -T "$file" "ftp://$FTP_USERNAME:$FTP_PASSWORD@$FTP_SERVER/$remote_path"
+          done
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
