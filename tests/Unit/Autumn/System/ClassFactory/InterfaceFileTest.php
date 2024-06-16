@@ -1,6 +1,6 @@
 <?php
 
-use Autumn\System\ClassFactory\interfaceFile;
+use Autumn\System\ClassFactory\InterfaceFile;
 use Autumn\System\ClassFactory\Method;
 use PHPUnit\Framework\TestCase;
 
