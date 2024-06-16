@@ -20,7 +20,7 @@ class ConstantTest extends TestCase
         );
         $constant->setPublic(true);
 
-        $expected = "\t/**\r\n\t * @var string\r\n\t */\r\n\tpublic const CONST_NAME = 'someValue';";
+        $expected = "\t/**\n\t * @var string\n\t */\n\tpublic const CONST_NAME = 'someValue';";
         $this->assertEquals($expected, (string)$constant);
 
         $constant = new Constant(
@@ -30,7 +30,7 @@ class ConstantTest extends TestCase
         );
         $constant->setPrivate(true);
 
-        $expected = "\t/**\r\n\t * A constant\r\n\t */\r\n\tprivate const CONST_NAME = 42;";
+        $expected = "\t/**\n\t * A constant\n\t */\n\tprivate const CONST_NAME = 42;";
         $this->assertEquals($expected, (string)$constant);
 
         $constant = new Constant(
@@ -40,7 +40,7 @@ class ConstantTest extends TestCase
         );
         $constant->setProtected(true);
 
-        $expected = "\t/**\r\n\t */\r\n\tprotected const CONST_NAME = array (\n  0 => 1,\n  1 => 2,\n  2 => 3,\n);";
+        $expected = "\t/**\n\t */\n\tprotected const CONST_NAME = array (\n  0 => 1,\n  1 => 2,\n  2 => 3,\n);";
         $this->assertEquals($expected, (string)$constant);
     }
 
