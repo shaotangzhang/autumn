@@ -57,3 +57,5 @@ Thumbs.db
 # 可能的日志文件
 *.log
 *.txt
+
+.phpunit.result.cache
