@@ -24,10 +24,10 @@ class TraitUsage implements \Stringable
             $parts .= '{';
 
             foreach ($this->modifications as $modification) {
-                $parts .= "\r\n\t\t" . implode(' ', $modification) . ';';
+                $parts .= PHP_EOL . "\t\t" . implode(' ', $modification) . ';';
             }
 
-            $parts .= "\r\n\t}";
+            $parts .= PHP_EOL . "\t}";
             return DocComment::print(1, null, $parts);
         } else {
             return DocComment::print(1, null, $parts . ';');

@@ -40,7 +40,7 @@ class ParameterTest extends TestCase
             attributes: [$attribute]
         );
 
-        $expected = "#[TestAttribute(arg: 'value')]\r\nstring &\$paramName = 'defaultValue'";
+        $expected = "#[TestAttribute(arg: 'value')]\nstring &\$paramName = 'defaultValue'";
         $this->assertEquals($expected, (string)$param);
 
         $param = new Parameter(
