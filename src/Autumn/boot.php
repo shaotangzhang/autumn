@@ -43,7 +43,7 @@ if (!function_exists('app')) {
             $app = App::context();
 
             if (!$app) {
-                if (!preg_match('/^\w+$/', $class)) {
+                if (!preg_match('/^\w+$/', $class ??= 'app')) {
                     exit('Invalid application name: ' . $class);
                 }
 
@@ -94,13 +94,13 @@ if (!function_exists('fire')) {
      *
      * @param string $event The name of the event to fire.
      * @param object|array|null $sender The event sender or an array of arguments.
-     * @param mixed ...$args Additional arguments to pass to the event handlers.
+     * @param array|null $args Additional arguments to pass to the event handlers.
      * @return bool True if the event was handled successfully, false otherwise.
      */
-    function fire(string $event, object|array $sender = null, mixed ...$args): bool
+    function fire(string $event, object|array $sender = null, array $args = null): bool
     {
         if (is_array($sender)) {
-            return Event::fire($event, null, array_merge($sender, $args));
+            return Event::fire($event, null, array_merge($sender, $args ?? []));
         }
 
         return Event::fire($event, $sender, $args);
@@ -178,3 +178,4 @@ if (!function_exists('view')) {
         TemplateService::context()->renderView($view);
     }
 }
+

@@ -1,10 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        19/12/2023
- */
-
 namespace Autumn\Http\Message;
 
 use Psr\Http\Message\ServerRequestInterface;

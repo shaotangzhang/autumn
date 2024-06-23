@@ -1,9 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        20/12/2023
- */
 
 namespace Autumn\Http\Message;
 
@@ -12,13 +7,11 @@ use Psr\Http\Message\UploadedFileInterface;
 
 class UploadedFile implements UploadedFileInterface
 {
-    private array $uploadedFileInfo = [];
     private bool $moved = false;
     private ?StreamInterface $stream = null;
 
-    public function __construct(array $uploadedFileInfo = [])
+    public function __construct(private readonly array $uploadedFileInfo = [])
     {
-        $this->uploadedFileInfo = $uploadedFileInfo;
     }
 
     public static function fromStream(StreamInterface $stream, array $uploadedFileInfo = []): static
@@ -117,11 +110,5 @@ class UploadedFile implements UploadedFileInterface
     public function getClientMediaType(): ?string
     {
         return $this->uploadedFileInfo['type'] ?? null;
-    }
-
-    public function getDigest(): ?string
-    {
-        $digest = $this->uploadedFileInfo['digest'] ?? null;
-        return is_string($digest) ? $digest : null;
     }
 }

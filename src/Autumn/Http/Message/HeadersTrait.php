@@ -1,10 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        20/12/2023
- */
-
 namespace Autumn\Http\Message;
 
 trait HeadersTrait
@@ -83,7 +77,7 @@ trait HeadersTrait
             if (is_array($value)) {
                 array_push($clone->headers[$headerName], ...$values);
             } else {
-                array_push($clone->headers[$headerName], $values);
+                $clone->headers[$headerName][] = $values;
             }
         }
         return $clone;

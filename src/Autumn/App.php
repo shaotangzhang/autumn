@@ -11,7 +11,6 @@ final class App
 {
     private static ?self $instance = null;
     private static ?ClassLoader $classLoader = null;
-
     private static ?Application $application = null;
 
     private function __construct(private readonly string $appName)

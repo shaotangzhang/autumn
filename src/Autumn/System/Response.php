@@ -21,7 +21,7 @@ class Response implements ResponseInterface
 
     private string $protocol;
 
-    public function __construct(private readonly ?string $content = null, int $statusCode = null, string $reasonPhrase = null, string $protocolVersion = null)
+    public function __construct(private readonly mixed $content = null, int $statusCode = null, string $reasonPhrase = null, string $protocolVersion = null)
     {
         $this->setStatusCode($statusCode ?? static::DEFAULT_STATUS_CODE);
         $this->setReasonPhrase($reasonPhrase ?? static::DEFAULT_REASON_PHRASE);
@@ -44,6 +44,14 @@ class Response implements ResponseInterface
     public function setProtocol(string $protocol): void
     {
         $this->protocol = $protocol;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getContent(): mixed
+    {
+        return $this->content;
     }
 
     public function send(): void
