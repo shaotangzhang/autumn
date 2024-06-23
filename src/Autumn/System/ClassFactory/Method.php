@@ -110,6 +110,13 @@ class Method implements Stringable
         return $this->codes;
     }
 
+    /**
+     * @param array $codes
+     */
+    public function setCodes(array $codes): void
+    {
+        $this->codes = $codes;
+    }
     public function append(string ...$codes): void
     {
         foreach ($codes as $code) {
@@ -131,13 +138,13 @@ class Method implements Stringable
         $this->name = $name;
     }
 
-    public function addParameter(string|Parameter $parameter): void
+    public function addParameter(string|Parameter $parameter): Parameter
     {
         if (is_string($parameter)) {
             $parameter = new Parameter($parameter);
         }
 
-        $this->parameters[] = $parameter;
+        return $this->parameters[] = $parameter;
     }
 
     public function getParameters(): array

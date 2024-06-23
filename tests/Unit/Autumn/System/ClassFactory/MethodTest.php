@@ -74,11 +74,12 @@ class MethodTest extends TestCase
     {
         $method = new Method('methodName');
         $method->addParameter(new Parameter('param1', Type::INT));
+        $method->addParameter(new Parameter('param2', Type::STRING))->setDefaultValue('abc');
         $method->setReturnType(Type::STRING);
         $method->append('$result = "Hello World";', 'return $result;');
 
         $expected = <<<PHP
-\tfunction methodName(int \$param1): string
+\tfunction methodName(int \$param1, string \$param2 = 'abc'): string
 \t{
 \t\t\$result = "Hello World";
 \t\treturn \$result;

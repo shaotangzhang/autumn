@@ -8,6 +8,7 @@ use Autumn\System\Application;
 use Autumn\System\Request;
 use Autumn\System\Response;
 use Composer\Autoload\ClassLoader;
+use Psr\Http\Message\ResponseInterface;
 
 class AppTest extends TestCase
 {
@@ -21,7 +22,7 @@ class AppTest extends TestCase
         // Mock Application class for testing purposes
         $appClass = new class extends Application
         {
-            public function handle(Request $request): Response
+            public function handle(Request $request): ResponseInterface
             {
                 return new Response('Hello, World!');
             }

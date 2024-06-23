@@ -12,11 +12,15 @@
 namespace Autumn;
 
 use Autumn\System\Application;
+use Autumn\System\Extension;
 use Autumn\System\Request;
 use Autumn\System\Response;
 use Composer\Autoload\ClassLoader;
 
 defined('DOC_ROOT') or define('DOC_ROOT', dirname(__DIR__, 2));
+defined('SRC_ROOT') or define('SRC_ROOT', dirname(__DIR__));
+
+include_once __DIR__ . '/helpers.php';
 
 /**
  * Autumn Framework App Class
@@ -26,6 +30,8 @@ defined('DOC_ROOT') or define('DOC_ROOT', dirname(__DIR__, 2));
  */
 final class App
 {
+    public const DEFAULT_APPLICATION_NAME = 'app';
+
     /**
      * @var ClassLoader|null The Composer class loader instance.
      */
@@ -35,6 +41,7 @@ final class App
      * @var Application|null The current application instance.
      */
     private static ?Application $application = null;
+    private static string $appName = '';
 
     /**
      * Constructor.
@@ -68,6 +75,11 @@ final class App
         }
     }
 
+    public static function name(): string
+    {
+        return self::$appName;
+    }
+
     /**
      * Get the current application instance.
      *
@@ -75,7 +87,7 @@ final class App
      */
     public static function context(): Application
     {
-        return self::$application ?? exit('No application is running.');
+        return self::$application ?? throw new \RuntimeException('No application is running.');
     }
 
     /**
@@ -94,8 +106,8 @@ final class App
             exit('The application is already running.');
         }
 
-        $class = self::detectApplication($appName);
-        if (!$class) {
+        $class = self::detectApplication(self::$appName = $appName);
+        if (!$class || !is_subclass_of($class, Application::class)) {
             exit(sprintf('The application `%s` is not found.', $appName));
         }
 
@@ -104,6 +116,11 @@ final class App
 
         self::$application = new $class($appName);
         return self::$application->handle(Request::capture());
+    }
+
+    public static function isBoot(): bool
+    {
+        return isset(self::$application);
     }
 
     /**
@@ -116,7 +133,7 @@ final class App
     private static function detectApplication(string $appName): ?string
     {
         // Default class name is the provided app name
-        $class = $appName;
+        $class = $appName ?: self::DEFAULT_APPLICATION_NAME;
 
         // Check if the app name matches a valid pattern
         if (preg_match('/^[a-z]\w*(?:_[a-z]\w*)*$/i', $appName) && (strlen($appName) < 32)) {
@@ -125,7 +142,7 @@ final class App
 
             // If the file exists, construct the class name
             if (is_file($file)) {
-                $class = str_replace(' ', '', ucwords(str_replace($appName, '_', ' '))) . '\\Application';
+                $class = str_replace(' ', '', ucwords(strtr($appName, '_', ' '))) . '\\Application';
             }
         }
 
@@ -171,7 +188,7 @@ final class App
      */
     public static function exceptionHandler(\Throwable $exception): void
     {
-        if($_ENV['DEBUG']??null) {
+        if ($_ENV['DEBUG'] ?? null) {
             exit($exception);
         }
 
@@ -207,6 +224,13 @@ final class App
         // Check if a fatal error occurred
         if ($error = error_get_last()) {
             self::errorHandler($error['type'], $error['message'], $error['file'], $error['line']);
+        }
+    }
+
+    public static function registerNamespacePath(string $namespace, string $filePath): void
+    {
+        if ($filePath = realpath($filePath)) {
+            self::$classLoader->addPsr4(trim($namespace, '/\\') . '\\', realpath($filePath));
         }
     }
 }

@@ -6,16 +6,41 @@ class DocComment implements \Stringable
 {
     public const TAB = "\t";
 
+    // Define replacement rules as constants
+    public const STRING_NORMALIZER = [
+        '/\r?\n/' => PHP_EOL,
+        '/\t/' => '    '
+    ];
+
+    /**
+     * Normalize string by replacing all \r\n or \n with PHP_EOL and tabs with four spaces.
+     *
+     * @param string $text The input string to normalize.
+     * @return string The normalized string.
+     */
+    public static function normalizeString(string $text): string
+    {
+        return preg_replace(
+            array_keys(self::STRING_NORMALIZER),
+            array_values(self::STRING_NORMALIZER),
+            $text
+        );
+    }
+
     public const DEFAULT_LINE_WIDTH = 80;
 
+    /**
+     * @var array<Annotation>
+     */
     private array $annotations = [];
 
     public function __construct(
         private string $comment = '',
-        array $annotations = [],
+        array          $annotations = [],
         private string $intent = '',
-        private int $lineWidth = self::DEFAULT_LINE_WIDTH
-    ) {
+        private int    $lineWidth = self::DEFAULT_LINE_WIDTH
+    )
+    {
         foreach ($annotations as $name => $annotation) {
             if ($annotation instanceof Annotation) {
                 if (is_string($name)) {
@@ -105,7 +130,28 @@ class DocComment implements \Stringable
             $lines[] = $intent . $other;
         }
 
-        return implode(PHP_EOL, $lines);
+        return preg_replace("/\r?\n/", PHP_EOL, implode(PHP_EOL, $lines));
+    }
+
+    public static function paramsOf(string|object|callable $classOrCallable, string $paramName): array
+    {
+        try {
+            if (is_callable($classOrCallable)) {
+                $reflection = new \ReflectionFunction($classOrCallable);
+            } elseif (is_object($classOrCallable)) {
+                $reflection = new \ReflectionObject($classOrCallable);
+            } else {
+                $reflection = new \ReflectionClass($classOrCallable);
+            }
+
+            if ($comment = $reflection->getDocComment()) {
+                $docComment = static::parse($comment);
+                return $docComment->getParams($paramName);
+            }
+        } catch (\ReflectionException) {
+        }
+
+        return [];
     }
 
     public function __toString(): string
@@ -286,5 +332,18 @@ class DocComment implements \Stringable
     public function addParameter(Parameter $parameter): void
     {
         $this->addAnnotation('param', $parameter->getType(), '$' . $parameter->getName(), $parameter->getComment());
+    }
+
+    public function getParams(string $name): array
+    {
+        $values = [];
+
+        foreach ($this->annotations as $annotation) {
+            if ($annotation->getName() === $name) {
+                $values[] = $annotation->getContent();
+            }
+        }
+
+        return $values;
     }
 }

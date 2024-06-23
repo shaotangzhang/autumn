@@ -1,5 +1,14 @@
 <?php
+
 namespace Autumn\System;
+
+use Autumn\App;
+use Autumn\Http\Server\MiddlewareGroup;
+use Autumn\System\ServiceContainer\ServiceContainer;
+use Autumn\System\ServiceContainer\ServiceContainerInterface;
+use Autumn\System\ServiceContainer\ServiceProviderInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 
 /**
  * Abstract base class for Autumn framework applications.
@@ -9,16 +18,18 @@ namespace Autumn\System;
  *
  * @package Autumn\System
  */
-abstract class Application extends Container
+abstract class Application
 {
     private static ?self $instance = null;
-
+    private ServiceContainerInterface $serviceContainer;
     private string $root;
 
     /**
      * @var array The array of service providers.
      */
-    private array $providers = [];
+    private array $registeredProviders = [];
+
+    private MiddlewareGroup|null $middlewareGroup = null;
 
     /**
      * Constructor.
@@ -32,13 +43,13 @@ abstract class Application extends Container
         if (!self::$instance && method_exists($this, 'exceptionHandler')) {
             set_exception_handler([$this, 'exceptionHandler']);
         }
-        
+
         // Store the current instance statically
         self::$instance = $this;
 
         // Determine root directory of the application
         $reflection = new \ReflectionObject($this);
-        $this->root = dirname($reflection->getFileName());
+        $this->root = dirname($reflection->getFileName(), 2);
 
         // Load environment configuration from .env file if exists
         if ($file = $this->realpath('config', '.env')) {
@@ -47,6 +58,106 @@ abstract class Application extends Container
                 $_ENV = array_merge($_ENV, $data);
             }
         }
+
+        $this->loadExtensions();
+        $this->loadRoutes();
+    }
+
+    /**
+     * @return MiddlewareGroup
+     */
+    public function getMiddlewareGroup(): MiddlewareGroup
+    {
+        return $this->middlewareGroup ??= new MiddlewareGroup;
+    }
+
+    protected function loadRoutes(): void
+    {
+        if ($file = $this->realpath('config', 'routes.php')) {
+            include_once $file;
+        }
+    }
+
+    protected function loadExtensions(): void
+    {
+        if ($file = $this->realpath('config', 'extensions.php')) {
+            $extensions = include_once $file;
+            if (is_array($extensions)) {
+                $group = $this->getMiddlewareGroup();
+
+                foreach ($extensions as $alias => $extension) {
+                    if ($extension instanceof Extension) {
+                        // Register the extension as a service provider within the application
+                        $this->registerProvider($extension, is_string($alias) ? $alias : null);
+
+                        // Add REQUIRED_MIDDLEWARES of the extension to the application
+                        $group->addMiddleware(...$extension::REQUIRED_MIDDLEWARES);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @return ServiceContainerInterface
+     */
+    public function getServiceContainer(): ServiceContainerInterface
+    {
+        return $this->serviceContainer ??= new ServiceContainer;
+    }
+
+    /**
+     * Register a service provider.
+     *
+     * @param ServiceProviderInterface $provider The service provider instance to register.
+     * @param string|null $alias Optional alias for the service provider.
+     * @throws \RuntimeException If the service provider or alias is already registered.
+     */
+    public function registerProvider(ServiceProviderInterface $provider, string $alias = null): void
+    {
+        // Check if alias is provided and validate against existing providers
+        if ($alias) {
+            if (isset($this->registeredProviders[$alias])) {
+                throw new \RuntimeException(sprintf("The service provider alias `%s` is already registered.", $alias));
+            }
+        }
+
+        // Check if the provider instance is already registered
+        if (in_array($provider, $this->registeredProviders, true)) {
+            throw new \RuntimeException(sprintf("The service provider `%s` is already registered.", $provider::class));
+        }
+
+        // Register the provider with the service container
+        $provider->register($this->getServiceContainer());
+
+        // Store the provider instance with its alias if provided
+        if ($alias) {
+            $this->registeredProviders[$alias] = $provider;
+        }
+    }
+
+    /**
+     * Get a registered service provider by its alias or class name.
+     *
+     * @param string $provider The alias or class name of the service provider.
+     * @return ServiceProviderInterface|null The registered service provider instance, or null if not found.
+     */
+    public function getRegisteredProvider(string $provider): ?ServiceProviderInterface
+    {
+        // Check if the provider alias exists directly
+        if (isset($this->registeredProviders[$provider])) {
+            return $this->registeredProviders[$provider];
+        }
+
+        // Check if the provider class name exists in the providers array
+        foreach ($this->registeredProviders as $registeredProvider) {
+            if (get_class($registeredProvider) === $provider) {
+                return $registeredProvider;
+            }
+        }
+
+        // Return null if provider not found
+        return null;
     }
 
     /**
@@ -108,22 +219,10 @@ abstract class Application extends Container
     public function handle(Request $request): Response
     {
         $route = Route::matches($request);
-        if(!$route) {
+        if (!$route) {
             return new Response('Not Found', 404);
         }
 
-        return $route->handle($request);
-    }
-
-    /**
-     * Register a service provider.
-     *
-     * @param ServiceProvider $provider
-     * @return void
-     */
-    public function registerProvider(ServiceProvider $provider): void
-    {
-        $provider->register($this);
-        $this->providers[] = $provider;
+        return Response::fromResponseInterface($route->process($request));
     }
 }

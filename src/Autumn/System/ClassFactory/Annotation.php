@@ -4,13 +4,13 @@ namespace Autumn\System\ClassFactory;
 
 class Annotation implements \Stringable
 {
-    public function __construct(private string $name, private string $content)
+    public function __construct(private string $name, private string $content = '')
     {
     }
 
     public function __toString(): string
     {
-        return '@' . $this->name . ' ' . $this->content;
+        return '@' . $this->name . rtrim(' ' . $this->content);
     }
 
     public function getName(): string

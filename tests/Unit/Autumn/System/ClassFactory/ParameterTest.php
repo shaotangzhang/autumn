@@ -40,7 +40,8 @@ class ParameterTest extends TestCase
             attributes: [$attribute]
         );
 
-        $expected = "#[TestAttribute(arg: 'value')]\nstring &\$paramName = 'defaultValue'";
+        $expected = "#[TestAttribute(arg: 'value')]
+string &\$paramName = 'defaultValue'";
         $this->assertEquals($expected, (string)$param);
 
         $param = new Parameter(
@@ -53,7 +54,11 @@ class ParameterTest extends TestCase
             attributes: []
         );
 
-        $expected = "array ...\$paramName = array (\n  0 => 1,\n  1 => 2,\n  2 => 3,\n)";
+        $expected = "array ...\$paramName = array (
+  0 => 1,
+  1 => 2,
+  2 => 3,
+)";
         $this->assertEquals($expected, (string)$param);
     }
 

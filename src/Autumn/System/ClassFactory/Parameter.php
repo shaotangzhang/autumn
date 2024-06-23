@@ -77,6 +77,8 @@ class Parameter implements \Stringable
             } else {
                 $parts[] = '= ' . var_export($this->defaultValue, true);
             }
+        } elseif (isset($this->defaultValue)) {
+            $parts[] = '= ' . var_export($this->defaultValue, true);
         }
 
         return DocComment::print(0, null, ...[...$this->attributes, implode(' ', $parts)]);
@@ -165,6 +167,11 @@ class Parameter implements \Stringable
     public function getDefaultValue(): mixed
     {
         return $this->defaultValue;
+    }
+
+    public function setDefaultValue(mixed $value): void
+    {
+        $this->defaultValue = $value;
     }
 
     public function getComment(): ?string
