@@ -7,27 +7,22 @@
 
 namespace Autumn\Database\Traits;
 
-use App\Models\User\User;
 use Autumn\Attributes\Transient;
 use Autumn\Database\Db;
 use Autumn\Database\DbConnection;
 use Autumn\Database\DbException;
 use Autumn\Database\Events\EntityCreatedEvent;
 use Autumn\Database\Events\EntityCreatingEvent;
+use Autumn\Database\Events\EntityDeletedEvent;
+use Autumn\Database\Events\EntityDeletingEvent;
 use Autumn\Database\Events\EntityEventDispatcher;
 use Autumn\Database\Events\EntityEventHandlerInterface;
-use Autumn\Database\Events\EntityEventInterface;
 use Autumn\Database\Events\EntityUpdatedEvent;
 use Autumn\Database\Events\EntityUpdatingEvent;
-use Autumn\Database\Interfaces\Creatable;
-use Autumn\Database\Interfaces\EntityInterface;
-use Autumn\Database\Interfaces\EntityManagerInterface;
-use Autumn\Database\Interfaces\Persistable;
 use Autumn\Database\Interfaces\RepositoryInterface;
-use Autumn\Database\Interfaces\Updatable;
+use Autumn\Database\Models\Entity;
 use Autumn\Database\Models\Repository;
 use Autumn\Events\Event;
-use Autumn\Exceptions\ForbiddenException;
 use Autumn\Exceptions\NotFoundException;
 use Autumn\Exceptions\ServerException;
 use Autumn\Exceptions\SystemException;
@@ -36,26 +31,6 @@ use DateTimeImmutable;
 trait EntityManagerTrait
 {
     use EntityRepositoryTrait;
-
-    #[Transient]
-    private bool $ignoreOnCreate = false;
-
-    /**
-     * @return bool
-     */
-    public function isIgnoreOnCreate(): bool
-    {
-        return $this->ignoreOnCreate;
-    }
-
-    /**
-     * @param bool $ignoreOnCreate
-     */
-    public function setIgnoreOnCreate(bool $ignoreOnCreate): void
-    {
-        $this->ignoreOnCreate = $ignoreOnCreate;
-    }
-
 
     /**
      * Hooks an Entity Event Handler to handle all the necessary events of this entity
@@ -66,11 +41,6 @@ trait EntityManagerTrait
     public static function hook(string|EntityEventHandlerInterface $handler): void
     {
         EntityEventDispatcher::hook(static::class, $handler);
-    }
-
-    public static function repository(array $context = null, DbConnection $connection = null): RepositoryInterface
-    {
-        return Repository::of(static::class, $context, $connection);
     }
 
     public static function find(array|int $context): ?static
@@ -104,9 +74,12 @@ trait EntityManagerTrait
         }
 
         $data = array_merge($extra ?? [], is_array($context) ? $context : []);
-        return static::createFrom($data);
+        return static::from($data);
     }
 
+    /**
+     * @throws ServerException
+     */
     public static function findOrCreate(array|int $context, array $extra = null): static
     {
         if ($instance = static::find($context)) {
@@ -215,12 +188,15 @@ trait EntityManagerTrait
             $instance = clone $entity;
         }
 
+        if (!$instance instanceof Entity) {
+            throw SystemException::of('The instance `%s` is not an Entity.', $instance::class);
+        }
+
         // Track original data for comparison if changes are provided
         $originData = $instance->toArray();
         if ($changes) {
             $instance->fromArray($changes);
         }
-
 
         // Create the event instance
         $updatingEvent = new EntityUpdatingEvent($instance, $changes);
@@ -284,210 +260,40 @@ trait EntityManagerTrait
         return $filteredData;
     }
 
-    public static function delete(EntityManagerInterface|int $entity): static
-    {
-
-    }
-
-    public function save(array $changes = null): bool
-    {
-    }
-
-    public function destroy(): bool
-    {
-
-    }
-
-
     /**
-     * Find the record and return the instance
+     * Delete a model entity by ID or object instance.
      *
-     * @param array $data
-     * @return static
+     * @param int|self $entity The ID of the entity or the entity object itself.
+     * @return bool True if deletion is successful, false otherwise.
+     * @throws \Exception If entity cannot be found or deletion fails.
      */
-    public static function findFrom(array $data): static
+    public static function delete(int|self $entity): bool
     {
-        $instance = static::readonly()->fromArray($data);
-        foreach ($data as $name => $value) {
-            if ($column = static::entity_column($name)?->getName()) {
-                $instance->and($column, $instance->__get($name));
-            }
-        }
-        return $instance;
-    }
-
-    /**
-     * Create a record and return the instance
-     *
-     * @param array $data
-     * @param bool|null $ignore
-     * @return EntityManagerTrait|null
-     * @throws \Throwable
-     */
-    public static function createFrom(array $data, bool $ignore = null): ?static
-    {
-        if ($connection = Db::forEntity(static::class)) {
-            $connection->transactional(function ($connection) use ($data, $ignore) {
-
-                $instance = static::from($data);
-
-
-                if ($column = Db::entity_updated_at(static::class)) {
-                    Db::entity_property_set($instance, $column, new DateTimeImmutable);
-                }
-
-                $id = $connection->insert(Db::entity_name(static::class), $data, $ignore);
-                if ($id) {
-                    return static::find([Db::entity_primary_key(static::class) => $id]);
-                }
-
-
-            });
+        if (is_int($entity)) {
+            // If $entity is an integer, assume it's the ID of the entity
+            $entity = self::find($entity);
         }
 
-        return null;
-    }
+        if (!$entity instanceof Entity) {
+            throw new \InvalidArgumentException('Invalid entity provided.');
+        }
 
-    /**
-     * Persists the current entity object.
-     *
-     * This method can create or update the entity object based on its state (new or existing).
-     * It triggers appropriate events and performs data validation before and after the operation.
-     *
-     * @param array|null $changes Optional. An array of changes to apply. If provided, it updates the object's data.
-     *
-     * @throws DbException If a database operation fails.
-     * @throws ForbiddenException If the instance is read-only or does not have a valid database connection.
-     *
-     * @return bool Returns true if the persist operation is successful, otherwise false.
-     *
-     * @deprecated
-     */
-    public function __persist__(array $changes = null, DbConnection $db = null): bool
-    {
-        if (!$this instanceof Persistable || !$this instanceof EntityInterface) {
+        // Dispatch EntityDeletingEvent and check if propagation is stopped
+        if (Event::dispatch(new EntityDeletingEvent($entity)) === false) {
             return false;
         }
 
-        if (!($db ??= $this->connection())) {
-            throw ForbiddenException::of('The instance of `%s` is readonly.', static::class);
-        }
-
-        $originData = $this->toArray();
-        if ($changes) {
-            $this->fromArray($changes);
-        }
-
-        $action = $this->isNew() ? 'create' : 'update';
-        if (!$this->fire($action, $this)) {
-            return false;
-        }
-
-        $this->validate($action);
-
-        if ($this instanceof Updatable) {
-            if ($updatedAtColumn = static::column_updated_at()) {
-                $this[$updatedAtColumn] = new DateTimeImmutable;
-            }
-        }
-
-        if ($action === 'create') {
-            if ($this instanceof Creatable) {
-                if ($createdAtColumn = static::column_created_at()) {
-                    $this[$createdAtColumn] = new DateTimeImmutable;
-                }
-            }
-            $data = $this->toArray();
-        } else {
-            $data = [];
-
-            foreach ($this->toArray() as $name => $value) {
-                if ($value !== ($originData[$name] ?? null)) {
-                    $data[$name] = $value;
-                }
-            }
-
-            if ($this instanceof Creatable) {
-                if ($createdAtColumn = static::column_created_at()) {
-                    unset($data[$createdAtColumn]);
-                }
-            }
-        }
-
-        unset($data[$pk = static::column_primary_key()]);
-
-        foreach ($data as $name => $value) {
-            if (is_array($value)) {
-                $data[$name] = json_encode($value);
-            }
-        }
-
-        if ($action === 'create') {
-
-            $id = $db->insert(static::entity_name(), $data, $this->ignoreOnCreate);
-            if ($id > 0) {
-                $this->setId($id);
-                $result = true;
-            }
-
-            $action = 'created';
-        } else {
-            if ($data && $db->update(static::entity_name(), $data, [$pk => $this->getId()])) {
-                $result = true;
-            }
-            $action = 'updated';
-        }
-
-        return ($result ?? null) && $this->fire($action, $this, $changes);
-    }
-
-    /**
-     * Deletes the current entity object.
-     *
-     * This method triggers the `delete` event before deletion and the `deleted` event after deletion.
-     * If the instance is read-only or does not have a valid database connection, it throws a `ForbiddenException`.
-     *
-     * @return bool Returns true if the deletion is successful, otherwise false.
-     * @throws ForbiddenException If the instance is read-only or does not have a valid database connection.
-     *
-     * @throws DbException If a database operation fails.
-     *
-     * @deprecated
-     */
-    private function __destroy__(?DbConnection $db = null): bool
-    {
-        if (!$this instanceof Persistable || !$this instanceof EntityInterface) {
-            return false;
-        }
-
-        if (!($id = $this->getId())) {
-            return false;
-        }
-
-        if (!($db = $this->connection())) {
-            throw ForbiddenException::of('The instance of `%s` is readonly.', static::class);
-        }
-
-        if (!$this->fire('delete', $this)) {
-            return false;
-        }
-
-        $this->validate('delete');
-
-
-        $result = $db->delete(static::entity_name(), [
-            static::column_primary_key() => $id
+        // Perform database deletion
+        $affectedRows = Db::forEntity(static::class)->delete(static::entity_name(), [
+            static::column_primary_key() => $entity->getId()
         ]);
 
-        if ($result) {
-            $this->fire('deleted', $this);
+        if ($affectedRows > 0) {
+            // Dispatch EntityDeletedEvent after successful deletion
+            Event::dispatch(new EntityDeletedEvent($entity));
+            return true;
         }
 
-        return !!$result;
-    }
-
-    public function queryByRequest(array|\ArrayAccess $request, array $context = null, array &$args = null): RepositoryInterface
-    {
-        return $this->getList($context);
+        return false;
     }
 }

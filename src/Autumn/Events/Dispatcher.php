@@ -2,7 +2,6 @@
 
 namespace Autumn\Events;
 
-use Psr\EventDispatcher\ListenerProviderInterface;
 use Psr\EventDispatcher\StoppableEventInterface;
 
 /**

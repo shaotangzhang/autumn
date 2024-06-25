@@ -42,6 +42,11 @@ class EntityEventDispatcher implements EventHandlerInterface, ContextInterface
         'deleted' => EntityDeletedEvent::class,
     ];
 
+    public static function register(): static
+    {
+        return self::context();
+    }
+
     /**
      * Registers event listeners on the default instance when created.
      *
@@ -67,12 +72,14 @@ class EntityEventDispatcher implements EventHandlerInterface, ContextInterface
      */
     public static function hook(string $entity, string|EntityEventHandlerInterface $handler): void
     {
-        foreach (static::REGISTERED_EVENTS as $action => $event) {
+        self::context();
+
+        foreach (self::REGISTERED_EVENTS as $action => $event) {
             if (method_exists($handler, $action)) {
                 if (is_string($handler)) {
-                    static::listen($event, $entity, fn($e) => app($handler, true)->$action($e));
+                    self::listen($event, $entity, fn($e) => app($handler, true)->$action($e));
                 } else {
-                    static::listen($event, $entity, [$handler, $action]);
+                    self::listen($event, $entity, [$handler, $action]);
                 }
             }
         }

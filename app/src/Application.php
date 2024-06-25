@@ -7,11 +7,7 @@
 
 namespace App;
 
-use App\Models\User\User;
-use Autumn\Database\Events\EntityCreatedEvent;
 use Autumn\Database\Events\EntityEventDispatcher;
-use Autumn\Database\Events\EntityEventHandlerInterface;
-use Autumn\Database\Events\EntityEventInterface;
 
 class Application extends \Autumn\System\Application
 {
@@ -21,18 +17,7 @@ class Application extends \Autumn\System\Application
 
     protected function boot(): void
     {
-        EntityEventDispatcher::hook(User::class, new class implements EntityEventHandlerInterface {
-            public function creating(EntityEventInterface $event): void
-            {
-                echo 'creating ' . $event->getEntity()::entity_name();
-            }
-        });
-
-        User::hook(new class implements EntityEventHandlerInterface {
-            public function creating(EntityEventInterface $event): void
-            {
-                echo 'creating ' . $event->getEntity()::entity_name();
-            }
-        });
+        // register the EntityEventDispatcher as a handler of Event
+        EntityEventDispatcher::register();
     }
 }
