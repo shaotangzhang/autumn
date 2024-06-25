@@ -9,5 +9,5 @@ namespace Autumn\Events;
 
 interface EventHandlerInterface
 {
-    public function handle(EventInterface $event): mixed;
+    public function handle(EventInterface $event): void;
 }

@@ -99,7 +99,8 @@ class ServiceContainer implements ServiceContainerInterface
         $binding = $this->bindings[$abstract] ?? null;
         if (!$binding) {
             if ((env('USE_CLASS_DECORATOR_PROXY'))
-                && ($binding = DecoratorProxy::createProxyClass($abstract))) {
+                && ($binding = DecoratorProxy::createProxyClass($abstract))
+            ) {
                 $this->bindings[$abstract] = $binding;
             } else {
                 throw new \RuntimeException("Class '$abstract' is not bound.");
@@ -134,11 +135,11 @@ class ServiceContainer implements ServiceContainerInterface
      * Invoke a callable with resolved dependencies from the container context.
      *
      * @param callable $callable The callable to invoke
-     * @param array|\ArrayAccess $args Optional arguments for the callable
-     * @param array $context Optional context data for the callable
+     * @param array|\ArrayAccess|null $args Optional arguments for the callable
+     * @param array|null $context Optional context data for the callable
      * @return mixed The result of the callable invocation
      */
-    public function invoke(callable $callable, array|\ArrayAccess $args = [], array $context = []): mixed
+    public function invoke(callable $callable, array|\ArrayAccess $args = null, array $context = null): mixed
     {
         try {
             if (is_array($callable)) {
@@ -181,11 +182,11 @@ class ServiceContainer implements ServiceContainerInterface
      * Resolve parameters for a function or method using the container context.
      *
      * @param \ReflectionFunction|\ReflectionMethod $func The function or method reflection
-     * @param array|\ArrayAccess $args Optional arguments for parameter resolution
-     * @param array $context Optional context data for parameter resolution
+     * @param array|\ArrayAccess|null $args Optional arguments for parameter resolution
+     * @param array|null $context Optional context data for parameter resolution
      * @return array The resolved parameter values
      */
-    protected function injectParameters(\ReflectionFunction|\ReflectionMethod $func, array|\ArrayAccess $args = [], array $context = []): array
+    protected function injectParameters(\ReflectionFunction|\ReflectionMethod $func, array|\ArrayAccess $args = null, array $context = null): array
     {
         $resolver = null;
         $arguments = [];
@@ -210,7 +211,7 @@ class ServiceContainer implements ServiceContainerInterface
                 if ($type instanceof \ReflectionNamedType) {
                     $types = [$type];
                 } else {
-                    $types = $type->getTypes();
+                    $types = $type?->getTypes() ?? [];
                 }
 
                 foreach ($types as $type) {
@@ -233,11 +234,12 @@ class ServiceContainer implements ServiceContainerInterface
         return $arguments;
     }
 
-    protected function resolveParameter(\ReflectionParameter       $parameter,
-                                        ParameterResolverInterface $resolver = null,
-                                        array|\ArrayAccess         $args = null,
-                                        array                      $context = null): mixed
-    {
+    protected function resolveParameter(
+        \ReflectionParameter       $parameter,
+        ParameterResolverInterface $resolver = null,
+        array|\ArrayAccess         $args = null,
+        array                      $context = null
+    ): mixed {
         $name = $parameter->getName();
 
         if ($resolver) {
@@ -256,7 +258,7 @@ class ServiceContainer implements ServiceContainerInterface
                     if ($value !== null) {
                         return $value;
                     }
-                } catch (AccessDeniedException|ForbiddenException|NotFoundException|UnauthorizedException $ex) {
+                } catch (AccessDeniedException | ForbiddenException | NotFoundException | UnauthorizedException $ex) {
                     throw $ex;
                 } catch (\Throwable $ex) {
                     // Log or handle the exception as needed
@@ -288,4 +290,3 @@ class ServiceContainer implements ServiceContainerInterface
         return null;
     }
 }
-

@@ -8,6 +8,5 @@
 namespace Autumn\Events;
 
 interface StoppableEventInterface extends EventInterface, \Psr\EventDispatcher\StoppableEventInterface
-{
-    public function stopPropagation(): void;
+{    public function stopPropagation(): void;
 }

@@ -2,7 +2,11 @@
 
 namespace Autumn;
 
+use Autumn\Database\Db;
+use Autumn\Database\Events\EntityEventDispatcher;
+use Autumn\Events\Event;
 use Autumn\System\Application;
+use Autumn\System\Events\AppBootEvent;
 use Composer\Autoload\ClassLoader;
 
 defined('DOC_ROOT') or define('DOC_ROOT', dirname(__DIR__, 2));
@@ -65,7 +69,9 @@ final class App
         new self($appName);
 
         $class::main(...$_SERVER['argv'] ?? []);
-        return self::$application = new $class($classLoader);
+        self::$application = new $class($classLoader);
+        Event::dispatch(new AppBootEvent(self::$application));
+        return self::$application;
     }
 
     public static function name(): string

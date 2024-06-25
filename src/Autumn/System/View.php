@@ -7,11 +7,13 @@
 
 namespace Autumn\System;
 
+use Autumn\I18n\Translatable;
+use Autumn\I18n\Translation;
 use Autumn\Interfaces\ArrayInterface;
 use Autumn\Interfaces\Renderable;
 use Autumn\System\Templates\TemplateService;
 
-class View implements ArrayInterface, Renderable, \ArrayAccess
+class View implements ArrayInterface, Renderable, \ArrayAccess, Translatable
 {
     private array $slots = [];
 
@@ -19,11 +21,16 @@ class View implements ArrayInterface, Renderable, \ArrayAccess
 
     private ?TemplateService $templateService = null;
 
-    public function __construct(private string $name,
+    private ?Translation $translation = null;
+
+    private string $_template_name_;
+
+    public function __construct(string         $name,
                                 private ?array $args = null,
                                 private ?array $context = null
     )
     {
+        $this->_template_name_ = $name;
     }
 
     public function __get(string $name): mixed
@@ -52,7 +59,7 @@ class View implements ArrayInterface, Renderable, \ArrayAccess
      */
     public function getName(): string
     {
-        return $this->name;
+        return $this->_template_name_;
     }
 
     /**
@@ -60,7 +67,7 @@ class View implements ArrayInterface, Renderable, \ArrayAccess
      */
     public function setName(string $name): void
     {
-        $this->name = $name;
+        $this->_template_name_ = $name;
     }
 
     public function with(array $data): static
@@ -71,7 +78,7 @@ class View implements ArrayInterface, Renderable, \ArrayAccess
 
     public function toArray(): array
     {
-        return $this->args ?? [];
+        return $this->args ?: [];
     }
 
     /**
@@ -101,6 +108,33 @@ class View implements ArrayInterface, Renderable, \ArrayAccess
     public function setContents(mixed $contents): void
     {
         $this->contents = $contents;
+    }
+
+    /**
+     * @return Translation|null
+     */
+    public function getTranslation(): ?Translation
+    {
+        return $this->translation;
+    }
+
+    /**
+     * @param Translation|null $translation
+     */
+    public function setTranslation(?Translation $translation): void
+    {
+        $this->translation = $translation;
+    }
+
+    public function loadTranslation(string $path, string $prefix = null, string $lang = null): void
+    {
+        if ($translations = Translation::load($path, $prefix, $lang)) {
+            if ($this->translation) {
+                $this->translation->merge($translations);
+            } else {
+                $this->translation = $translations;
+            }
+        }
     }
 
     public function render(): void
@@ -170,5 +204,10 @@ class View implements ArrayInterface, Renderable, \ArrayAccess
     public function offsetUnset(mixed $offset): void
     {
         unset($this->args[$offset]);
+    }
+
+    public function translate(string $text, ...$args): ?string
+    {
+        return $this->getTranslation()?->format(...func_get_args()) ?? $text;
     }
 }

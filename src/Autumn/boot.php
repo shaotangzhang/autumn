@@ -3,6 +3,8 @@
 use Autumn\App;
 use Autumn\Events\Event;
 use Autumn\I18n\Locale;
+use Autumn\I18n\Translatable;
+use Autumn\I18n\Translation;
 use Autumn\System\Request;
 use Autumn\System\Route;
 use Autumn\System\Templates\TemplateService;
@@ -11,7 +13,6 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 require_once __DIR__ . '/App.php';
-
 
 if (!function_exists('env')) {
     /**
@@ -133,6 +134,45 @@ if (!function_exists('translate')) {
     function translate(string $text, array $args = null, string $domain = null): string
     {
         return Locale::translate($text, $args, $domain);
+    }
+}
+
+if (!function_exists('translation')) {
+    /**
+     * Translate a given text string using the localization system.
+     *
+     * @param string|Translatable $domain
+     * @param string|null $lang
+     * @return callable The translated text string.
+     */
+    function translation(string|Translatable $domain, string $lang = null): callable
+    {
+        if (is_string($domain)) {
+            $domain = new Translation($domain, $lang);
+        }
+
+        return fn(string $text, mixed ...$args) => $domain->translate($text, ...$args);
+    }
+}
+
+if (!function_exists('translatable')) {
+    function translatable(callable $callback, string|Translation $domain, string $lang = null)
+    {
+        $translation = is_string($domain) ? new Translation($domain, $lang) : $domain;
+        $origin = Translation::global($translation);
+
+        try {
+            return call_user_func($callback);
+        } finally {
+            Translation::global($origin);
+        }
+    }
+}
+
+if (!function_exists('t')) {
+    function t(?string $text, mixed ...$args): ?string
+    {
+        return Translation::global()->translate($text, $args);
     }
 }
 

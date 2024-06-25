@@ -7,7 +7,7 @@ use Attribute;
 #[Attribute(Attribute::TARGET_PROPERTY)]
 class JsonIgnore
 {
-    use HasOfReflection;
+    use AttributeCommonTrait;
 
     public const IGNORE_ANY = 'any';
     public const IGNORE_NULL = 'null';

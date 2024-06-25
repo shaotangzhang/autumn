@@ -4,6 +4,7 @@ namespace Autumn\System\Responses;
 
 use Autumn\System\Response;
 use Autumn\System\Service;
+use Autumn\System\Templates\TemplateService;
 use Psr\Http\Message\ResponseInterface;
 
 class ResponseService extends Service implements ResponseHandlerInterface
@@ -11,7 +12,9 @@ class ResponseService extends Service implements ResponseHandlerInterface
     /**
      * @var array<ResponseHandlerInterface>
      */
-    private array $handlers = [];
+    private array $handlers = [
+        TemplateService::class
+    ];
 
     protected static function createDefaultInstance(): static
     {

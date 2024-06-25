@@ -12,6 +12,7 @@ use Autumn\System\Response;
 class CallableResponse extends Response
 {
     private mixed $callable;
+    private ?array $context = null;
 
     public function __construct(callable $callable, int $statusCode = null, string $reasonPhrase = null, string $protocolVersion = null)
     {
@@ -22,6 +23,19 @@ class CallableResponse extends Response
         );
 
         $this->callable = $callable;
+    }
+
+    /**
+     * @return array|null
+     */
+    public function getContext(): ?array
+    {
+        return $this->context;
+    }
+
+    public function setContext(?array $context): void
+    {
+        $this->context = $context;
     }
 
     /**
@@ -40,7 +54,7 @@ class CallableResponse extends Response
         $this->callable = $callable;
     }
 
-    protected function sendContents(): void
+    protected function sendContent(): void
     {
         if (call_user_func($this->callable) !== false) {
             parent::sendContent();

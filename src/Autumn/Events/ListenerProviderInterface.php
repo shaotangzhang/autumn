@@ -11,6 +11,6 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 
 interface ListenerProviderInterface extends \Psr\EventDispatcher\ListenerProviderInterface, EventDispatcherInterface
 {
-    public function addListener(string|EventInterface $event, callable $listener): void;
+    public function addListener(string|EventInterface $event, string|callable|EventHandlerInterface $listener): void;
 
 }

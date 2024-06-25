@@ -2,28 +2,67 @@
 /**
  * Autumn PHP Framework
  *
- * Date:        13/02/2024
+ * Date: 13/02/2024
  */
 
 namespace Autumn\Events;
 
-use Autumn\App;
-use Autumn\System\ClassFactory;
-
-class Event
+class Event implements EventInterface
 {
     private static ?ListenerProviderInterface $dispatcher = null;
 
-    public static function fire(string $event, object $sender = null, array $args = null): bool
-    {
-        return true;
+    /**
+     * @param string $name The name of the event.
+     * @param object|null $sender The object that triggered the event, or null if not specified.
+     * @param array $args Additional arguments passed with the event.
+     */
+    public function __construct(
+        private readonly string $name,
+        private readonly ?object $sender = null,
+        private readonly array $args = []
+    ) {
     }
 
-    private static function dispatcher(): ?ListenerProviderInterface
+    /**
+     * Fires an event.
+     *
+     * @param string $event The name of the event to fire.
+     * @param object|null $sender The object that triggered the event, or null if not specified.
+     * @param mixed ...$args Additional arguments to pass with the event.
+     */
+    public static function fire(string $event, object $sender = null, mixed ...$args): void
     {
-        return self::$dispatcher ??= App::context()->getServiceContainer()->make(ListenerProviderInterface::class) ?? new Dispatcher();
+        $object = new static($event, $sender, $args);
+        static::dispatcher()->dispatch($object);
     }
 
+    /**
+     * Retrieves the event dispatcher instance.
+     *
+     * @return ListenerProviderInterface The event dispatcher instance.
+     */
+    private static function dispatcher(): ListenerProviderInterface
+    {
+        return self::$dispatcher ??= new Dispatcher;
+    }
+
+    /**
+     * Registers a listener for a specific event.
+     *
+     * @param string|EventInterface $event The class name of the event or an event object.
+     * @param string|callable|EventHandlerInterface $handler The listener or handler to register.
+     */
+    public static function listen(string|EventInterface $event, string|callable|EventHandlerInterface $handler): void
+    {
+        self::dispatcher()->addListener($event, $handler);
+    }
+
+    /**
+     * Dispatches an event and returns whether propagation was stopped.
+     *
+     * @param EventInterface $event The event object to dispatch.
+     * @return bool True if propagation was not stopped, false otherwise.
+     */
     public static function dispatch(EventInterface $event): bool
     {
         $event = self::dispatcher()->dispatch($event);
@@ -33,27 +72,33 @@ class Event
         return true;
     }
 
-    public static function listen(string|EventInterface $event, string|callable|EventHandlerInterface $handler): void
+    /**
+     * Retrieves the name of the event.
+     *
+     * @return string The event name.
+     */
+    public function getName(): string
     {
-        if (is_string($handler)) {
-            if (!is_callable($handler)) {
-                if (!is_subclass_of($handler, EventHandlerInterface::class)) {
-                    throw new \InvalidArgumentException(sprintf(
-                        'The handler must be the class of EventHandlerInterface or a callable, "%s" given.',
-                        $handler
-                    ));
-                }
+        return $this->name;
+    }
 
-                $handler = function (EventInterface $event) use ($handler) {
-                    return App::context()->getServiceContainer()->make($handler)?->handle($event);
-                };
-            }
-        } elseif ($handler instanceof EventHandlerInterface) {
-            $handler = function (EventInterface $event) use ($handler) {
-                return $handler->handle($event);
-            };
-        }
+    /**
+     * Retrieves the additional arguments passed with the event.
+     *
+     * @return array The event arguments.
+     */
+    public function getArgs(): array
+    {
+        return $this->args;
+    }
 
-        self::dispatcher()->addListener($event, $handler);
+    /**
+     * Retrieves the object that triggered the event, or null if not specified.
+     *
+     * @return object|null The event sender object.
+     */
+    public function getSender(): ?object
+    {
+        return $this->sender;
     }
 }

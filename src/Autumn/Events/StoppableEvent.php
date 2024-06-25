@@ -7,12 +7,21 @@
 
 namespace Autumn\Events;
 
+use Autumn\Attributes\Transient;
+
 class StoppableEvent implements StoppableEventInterface
 {
-    use StoppableEventTrait;
+    #[Transient]
+    private bool $propagationStopped = false;
 
-    public function __construct(array $context = null)
+    public function isPropagationStopped(): bool
     {
-        $this->context = $context ?? [];
+        return $this->propagationStopped;
     }
+
+    public function stopPropagation(): void
+    {
+        $this->propagationStopped = true;
+    }
+
 }

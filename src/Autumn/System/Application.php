@@ -2,9 +2,11 @@
 
 namespace Autumn\System;
 
+use Autumn\Events\Event;
 use Autumn\Exceptions\SystemException;
 use Autumn\Http\Server\MiddlewareGroup;
 use Autumn\Logging\ConsoleLogger;
+use Autumn\System\Events\AppBootEvent;
 use Autumn\System\ServiceContainer\ServiceContainer;
 use Autumn\System\ServiceContainer\ServiceContainerInterface;
 use Composer\Autoload\ClassLoader;
@@ -99,7 +101,11 @@ class Application implements RequestHandlerInterface
         $this->configMiddlewares();
         $this->configRoutes();
 
-        $this->getLogger()->info('Application starts');
+        Event::listen(AppBootEvent::class, function (AppBootEvent $event) {
+            if ($event->getApplication() === $this) {
+                $this->boot();
+            }
+        });
     }
 
     /**
@@ -125,6 +131,11 @@ class Application implements RequestHandlerInterface
         }
 
         return self::$instance;
+    }
+
+    protected function boot(): void
+    {
+        $this->getLogger()->info('Application starts');
     }
 
     /**
@@ -233,7 +244,11 @@ class Application implements RequestHandlerInterface
     #[NoReturn]
     public function exceptionHandler(\Throwable $exception): void
     {
-        echo $exception->getMessage();
+        if (env('DEBUG')) {
+            echo $exception;
+        } else {
+            echo $exception->getMessage();
+        }
         exit;
     }
 
@@ -453,5 +468,22 @@ class Application implements RequestHandlerInterface
     public function getLogger(): LoggerInterface
     {
         return $this->logger;
+    }
+
+    public function getLanguageFile(string $domain, string $lang): string
+    {
+        $lang = $lang ?: $this->getDefaultLang();
+        return $this->path('languages', $lang, strtr(trim($domain, '/\\'), '\\', '/'))
+            . $this->getLanguageFileExt();
+    }
+
+    public function getLanguageFileExt(): string
+    {
+        return '.ini';
+    }
+
+    public function getDefaultLang(): string
+    {
+        return env('SITE_LANG', 'en');
     }
 }

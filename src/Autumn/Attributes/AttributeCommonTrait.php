@@ -7,7 +7,7 @@
 
 namespace Autumn\Attributes;
 
-trait HasOfReflection
+trait AttributeCommonTrait
 {
     /**
      * @param \ReflectionClass|\ReflectionProperty|\ReflectionMethod|\ReflectionFunction|\ReflectionParameter $reflection

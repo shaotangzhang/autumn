@@ -3,17 +3,24 @@
 namespace Autumn\System\Templates;
 
 use Autumn\App;
+use Autumn\I18n\Translation;
+use Autumn\Interfaces\Renderable;
 use Autumn\System\ClassFactory\DocComment;
 use Autumn\System\Extension;
+use Autumn\System\Responses\CallableResponse;
+use Autumn\System\Responses\RenderableResponse;
+use Autumn\System\Responses\ResponseHandlerInterface;
 use Autumn\System\Service;
 use Autumn\System\View;
+use Psr\Http\Message\ResponseInterface;
 
-class TemplateService extends Service implements RendererInterface
+class TemplateService extends Service implements RendererInterface, ResponseHandlerInterface
 {
     /**
      * @var array<string|RendererInterface>
      */
     private array $renderers = [];
+    private ?TemplateEngineInterface $engine = null;
 
     /**
      * Creates and configures the default instance of this service.
@@ -152,7 +159,7 @@ class TemplateService extends Service implements RendererInterface
      */
     public function getApplicationViewPath(): string
     {
-        return App::context()->map('views', 'default');
+        return App::context()->path('views', 'default');
     }
 
     /**
@@ -309,5 +316,40 @@ class TemplateService extends Service implements RendererInterface
         return preg_match('#^\s*((?:\.{0,2}/)*(?:[\w-]+/)*[\w-]+)#', $comment, $matches)
             ? $matches[1]
             : null;
+    }
+
+    public function respond(mixed $data, int $statusCode = null, array $context = null): ?ResponseInterface
+    {
+        if ($data instanceof View) {
+
+            if ($this->engine) {
+                return new CallableResponse(fn() => $this->engine->outputView($data, $context), $statusCode);
+            }
+
+            return new CallableResponse(fn() => $this->outputView($data, $context), $statusCode);
+        }
+
+        return $data;
+    }
+
+    public function outputView(View $view, array $context = null): void
+    {
+        $file = $this->getTemplateFile($view->getName());
+        if (realpath($file)) {
+
+            $origin = Translation::global($view->getTranslation());
+
+            try {
+                $args = $view->toArray();
+                $result = (function () use ($args) {
+                    extract($args);
+                    return include func_get_arg(0);
+                })->call($view, $file);
+
+                $this->output($result, $args, $context);
+            } finally {
+                Translation::global($origin);
+            }
+        }
     }
 }
