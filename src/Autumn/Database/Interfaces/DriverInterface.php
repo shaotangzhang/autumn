@@ -32,4 +32,14 @@ interface DriverInterface
     public function commit(): void;
 
     public function rollback(): void;
+
+    public function startCrossTransaction(string $xid): bool;
+
+    public function endCrossTransaction(string $xid): bool;
+
+    public function createSavePoint(string $savePoint): bool;
+
+    public function releaseSavePoint(string $savePoint): bool;
+
+    public function rollbackToSavePoint(string $savePoint): bool;
 }

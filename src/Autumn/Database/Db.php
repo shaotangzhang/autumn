@@ -7,14 +7,13 @@
 
 namespace Autumn\Database;
 
-use Autumn\Database\Events\EntityEventDispatcher;
 use Autumn\Database\Interfaces\Creatable;
 use Autumn\Database\Interfaces\EntityInterface;
 use Autumn\Database\Interfaces\Recyclable;
 use Autumn\Database\Interfaces\Updatable;
 use Autumn\Database\Models\AbstractEntity;
+use Autumn\Exceptions\SystemException;
 use Autumn\Exceptions\ValidationException;
-use Autumn\System\Extension;
 
 class Db
 {
@@ -40,6 +39,11 @@ class Db
         }
 
         return self::$pool[$connectionName] ?? new DbConnection($connectionName);
+    }
+
+    public static function formatDateTime(\DateTimeInterface $time): string
+    {
+        return date(static::TIMESTAMP_PARAM_FORMAT, $time->getTimestamp());
     }
 
     public static function histories(): array
@@ -68,11 +72,6 @@ class Db
         return static::of()->execute($sql, $parameters);
     }
 
-    public static function formatDateTime(\DateTimeInterface $time): string
-    {
-        return date(static::TIMESTAMP_PARAM_FORMAT, $time->getTimestamp());
-    }
-
     public static function forEntity(string|EntityInterface $entity): ?DbConnection
     {
         if ($connection = static::entity_connection_name($entity)) {
@@ -83,6 +82,32 @@ class Db
 
         return null;
     }
+
+    public static function getConnectionOf(string|DbConnection $connection = null): DbConnection|string|null
+    {
+        if (is_string($db = $connection)) {
+            $db = static::of($connection);
+            if (!$db) {
+                throw SystemException::of('No database connection is configured.');
+            }
+        } elseif (!$connection) {
+            $db = static::of();
+            if (!$db) {
+                throw SystemException::of('No database connection is configured.');
+            }
+        }
+        return $db;
+    }
+
+    public static function transaction(callable $process, string|DbConnection $connection = null): mixed
+    {
+        $db = static::getConnectionOf($connection);
+
+
+
+    }
+
+    /** for Database ORM << **/
 
     public static function entity_connection_name(string|EntityInterface $entity): ?string
     {

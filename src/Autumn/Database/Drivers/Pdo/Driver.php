@@ -12,6 +12,7 @@ use Autumn\Database\Db;
 use Autumn\Database\DbConnection;
 use Autumn\Database\DbException;
 use Autumn\Database\Interfaces\DriverInterface;
+use Autumn\Exceptions\SystemException;
 
 class Driver implements DriverInterface
 {
@@ -267,22 +268,110 @@ class Driver implements DriverInterface
 
         return null;
     }
-
+    /**
+     * Begins a standard transaction.
+     */
     public function beginTransaction(): void
     {
         $this->connect();
         $this->pdo?->beginTransaction();
     }
 
+    /**
+     * Commits the current transaction.
+     */
     public function commit(): void
     {
-        $this->connect();
         $this->pdo?->commit();
     }
 
+    /**
+     * Rolls back the current transaction.
+     */
     public function rollback(): void
     {
-        $this->connect();
         $this->pdo?->rollback();
+    }
+
+    /**
+     * Starts an XA transaction with the given transaction ID (XID).
+     *
+     * @param string $xid The transaction ID.
+     * @return bool True on success, false on failure.
+     * @throws SystemException If preparing the XA START statement fails.
+     */
+    public function startCrossTransaction(string $xid): bool
+    {
+        $this->connect();
+        return $this->prepareAndExecute('XA START :xid', ['xid' => $xid]);
+    }
+
+    /**
+     * Ends the XA transaction with the given transaction ID (XID).
+     *
+     * @param string $xid The transaction ID.
+     * @return bool True on success, false on failure.
+     * @throws SystemException If preparing the XA END statement fails.
+     */
+    public function endCrossTransaction(string $xid): bool
+    {
+        return $this->prepareAndExecute('XA END :xid', ['xid' => $xid]);
+    }
+
+    /**
+     * Creates a savepoint with the given name.
+     *
+     * @param string $savePoint The name of the savepoint.
+     * @return bool True on success, false on failure.
+     * @throws SystemException If preparing the SAVEPOINT statement fails.
+     */
+    public function createSavePoint(string $savePoint): bool
+    {
+        $this->connect();
+        return $this->prepareAndExecute('SAVEPOINT :name', ['name' => $savePoint]);
+    }
+
+    /**
+     * Releases the savepoint with the given name.
+     *
+     * @param string $savePoint The name of the savepoint.
+     * @return bool True on success, false on failure.
+     * @throws SystemException If preparing the RELEASE SAVEPOINT statement fails.
+     */
+    public function releaseSavePoint(string $savePoint): bool
+    {
+        return $this->prepareAndExecute('RELEASE SAVEPOINT :name', ['name' => $savePoint]);
+    }
+
+    /**
+     * Rolls back the transaction to the savepoint with the given name.
+     *
+     * @param string $savePoint The name of the savepoint.
+     * @return bool True on success, false on failure.
+     * @throws SystemException If preparing the ROLLBACK TO SAVEPOINT statement fails.
+     */
+    public function rollbackToSavePoint(string $savePoint): bool
+    {
+        return $this->prepareAndExecute('ROLLBACK TO SAVEPOINT :name', ['name' => $savePoint]);
+    }
+
+    /**
+     * Prepares and executes an SQL statement with the given parameters.
+     *
+     * @param string $sql The SQL statement to prepare and execute.
+     * @param array|null $params The parameters to bind to the SQL statement.
+     * @return bool True on success, false on failure.
+     * @throws SystemException If preparing the SQL statement fails.
+     */
+    private function prepareAndExecute(string $sql, array $params = null): bool
+    {
+        if ($this->pdo) {
+            $statement = $this->pdo->prepare($sql);
+            if ($statement === false) {
+                throw new SystemException(sprintf('Failed to prepare statement: %s', $sql));
+            }
+            return $statement->execute($params);
+        }
+        return false;
     }
 }

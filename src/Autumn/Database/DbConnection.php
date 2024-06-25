@@ -20,9 +20,17 @@ class DbConnection implements ContextInterface
     private string $suffix;
     private ?DriverInterface $driver = null;
 
-    public function __construct(private ?string $name = null, private ?array $options = null)
+    public function __construct(private readonly ?string $name = null, private readonly ?array $options = null)
     {
         $this->suffix = strtoupper($this->name ? "_$this->name" : '');
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getName(): ?string
+    {
+        return $this->name;
     }
 
     public function getDriver(): DriverInterface
@@ -279,6 +287,31 @@ class DbConnection implements ContextInterface
     public function rollback(): void
     {
         $this->getDriver()->rollback();
+    }
+
+    public function startCrossTransaction(string $xid): bool
+    {
+        return $this->getDriver()->startCrossTransaction($xid);
+    }
+
+    public function endCrossTransaction(string $xid): bool
+    {
+        return $this->getDriver()->endCrossTransaction($xid);
+    }
+
+    public function createSavePoint(string $savePoint): bool
+    {
+        return $this->getDriver()->createSavePoint($savePoint);
+    }
+
+    public function releaseSavePoint(string $savePoint): bool
+    {
+        return $this->getDriver()->releaseSavePoint($savePoint);
+    }
+
+    public function rollbackToSavePoint(string $savePoint): bool
+    {
+        return $this->getDriver()->rollbackToSavePoint($savePoint);
     }
 
     public function database(): string
