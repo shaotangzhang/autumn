@@ -52,7 +52,7 @@ if (!function_exists('app')) {
             }
         }
 
-        if (!is_string($class) || ($class = trim($class))) {
+        if (!is_string($class) || !($class = trim($class))) {
             return $app;
         }
 
@@ -172,7 +172,7 @@ if (!function_exists('translatable')) {
 if (!function_exists('t')) {
     function t(?string $text, mixed ...$args): ?string
     {
-        return Translation::global()->translate($text, $args);
+        return Translation::global()?->translate($text, $args) ?? $text;
     }
 }
 

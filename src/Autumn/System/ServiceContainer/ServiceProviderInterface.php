@@ -6,9 +6,12 @@
  */
 
 namespace Autumn\System\ServiceContainer;
+
 use Autumn\System\Application;
 
 interface ServiceProviderInterface
 {
-    public static function mount(Application $application): void;
+    public static function register(ServiceContainerInterface $container): void;
+
+    public static function boot(Application $application): void;
 }

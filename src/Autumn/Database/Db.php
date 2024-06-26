@@ -38,11 +38,6 @@ class Db
      */
     private static array $histories = [];
 
-    /**
-     * @var DbTransaction[]
-     */
-    private static array $transactions = [];
-
     public static function of(string $connectionName = null): ?DbConnection
     {
         if (!$connectionName || ($connectionName === 'default')) {

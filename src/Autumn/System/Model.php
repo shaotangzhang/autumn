@@ -6,11 +6,11 @@ use Autumn\Attributes\JsonIgnore;
 use Autumn\Interfaces\ArrayInterface;
 use Autumn\Interfaces\ModelInterface;
 use Autumn\System\ServiceContainer\DecoratorProxy;
-use Autumn\Traits\HasProperties;
+use Autumn\Traits\ModelPropertiesTrait;
 
 class Model implements ModelInterface, \ArrayAccess, \JsonSerializable, ArrayInterface
 {
-    use HasProperties;
+    use ModelPropertiesTrait;
 
     public static function from(array $data): static
     {

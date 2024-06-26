@@ -7,12 +7,17 @@
 
 namespace Autumn\System;
 
+use Autumn\Http\Message\MessageTrait;
 use Autumn\Http\Message\ResponseTrait;
+use Autumn\Interfaces\ArrayInterface;
+use Autumn\Interfaces\Renderable;
 use Psr\Http\Message\ResponseInterface;
 
 class Response implements ResponseInterface
 {
-    use ResponseTrait;
+    use ResponseTrait {
+        setHeader as public;
+    }
 
     public const DEFAULT_STATUS_CODE = 200;
     public const DEFAULT_REASON_PHRASE = '';
@@ -21,8 +26,12 @@ class Response implements ResponseInterface
 
     private string $protocol;
 
-    public function __construct(private readonly mixed $content = null, int $statusCode = null, string $reasonPhrase = null, string $protocolVersion = null)
+    public function __construct(private readonly mixed $content = null, int $statusCode = null, string|array $reasonPhrase = null, string $protocolVersion = null)
     {
+        if (is_array($reasonPhrase)) {
+            $reasonPhrase = $reasonPhrase['reasonPhrase'] ?? $reasonPhrase['message'] ?? null;
+        }
+
         $this->setStatusCode($statusCode ?? static::DEFAULT_STATUS_CODE);
         $this->setReasonPhrase($reasonPhrase ?? static::DEFAULT_REASON_PHRASE);
 
@@ -105,8 +114,38 @@ class Response implements ResponseInterface
     {
         if ($stream = $this->body?->detach()) {
             stream_copy_to_stream($stream, fopen('php://output', 'w'));
-        } else {
-            echo $this->content;
+            return;
         }
+
+        $content = $this->content;
+        while ($content instanceof \Closure) {
+            $content = $content();
+        }
+
+        if ($content instanceof Renderable) {
+            $content->render();
+            return;
+        }
+
+        if ($content instanceof \DateTimeInterface) {
+            echo $content->format('c');
+            return;
+        }
+
+        if ($content instanceof ArrayInterface) {
+            $content = $content->toArray();
+        }
+
+        if (is_array($content) || $content instanceof \JsonSerializable) {
+            echo json_encode($content);
+            return;
+        }
+
+        if ($content instanceof \SimpleXMLElement || $content instanceof \DOMDocument) {
+            echo $content->saveXML();
+            return;
+        }
+
+        echo $content;
     }
 }

@@ -7,26 +7,13 @@
 
 namespace App;
 
-use Autumn\Database\Db;
-use Autumn\Database\Events\EntityEventDispatcher;
+use App\Providers\AppServiceProvider;
+use Autumn\Database\DbServiceProvider;
 
 class Application extends \Autumn\System\Application
 {
-    public static function main(string ...$args): void
-    {
-        $connection = Db::of();
-
-        $connection->transaction(function() {
-            echo 'Hello world!';
-        });
-
-        exit;
-
-    }
-
-    protected function boot(): void
-    {
-        // register the EntityEventDispatcher as a handler of Event
-        EntityEventDispatcher::register();
-    }
+    protected array $serviceProviders = [
+        DbServiceProvider::class,   // This can be a must if ORM is used
+        AppServiceProvider::class,
+    ];
 }

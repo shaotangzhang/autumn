@@ -3,57 +3,67 @@
 namespace Autumn\System\Responses;
 
 use Autumn\System\Response;
+use Autumn\System\Responses\Handlers\HTMLDocumentResponseHandler;
+use Autumn\System\Responses\Handlers\JsonResponseHandler;
+use Autumn\System\Responses\Handlers\ThrowableResponseHandler;
+use Autumn\System\Responses\Handlers\ViewResponseHandler;
+use Autumn\System\Responses\Handlers\XMLDocumentResponseHandler;
 use Autumn\System\Service;
-use Autumn\System\Templates\TemplateService;
 use Psr\Http\Message\ResponseInterface;
 
 class ResponseService extends Service implements ResponseHandlerInterface
 {
-    /**
-     * @var array<ResponseHandlerInterface>
-     */
-    private array $handlers = [
-        TemplateService::class
+    public const DEFAULT_HANDLERS = [
+        ViewResponseHandler::class,
+        ThrowableResponseHandler::class,
+        HTMLDocumentResponseHandler::class,
     ];
 
-    protected static function createDefaultInstance(): static
+    private static array $mimeTypeHandlers = [
+        '*/*' => self::DEFAULT_HANDLERS,
+        'text/html' => self::DEFAULT_HANDLERS,
+        'text/xml' => [XMLDocumentResponseHandler::class],
+        'application/json' => [JsonResponseHandler::class],
+    ];
+
+    private static array $registeredHandlers = [];
+
+    public static function registerMimeTypeHandler(string $mimeType, string|ResponseHandlerInterface ...$handlers): void
     {
-        $instance = new static;
-
-        $classes = [];
-        foreach (glob(__DIR__ . '/Handlers/*ResponseHandler.php') as $file) {
-            $classes[] = __NAMESPACE__ . '\\Handlers\\' . basename($file, '.php');
-        }
-
-        $instance->addHandler(...$classes);
-        return $instance;
+        $mime = strtolower($mimeType);
+        self::$mimeTypeHandlers[$mime] ??= [];
+        array_push(self::$mimeTypeHandlers[$mime], ...$handlers);
     }
 
-    public function addHandler(string|ResponseHandlerInterface ...$handlers): static
+    public static function registerHandler(string|ResponseHandlerInterface ...$handlers): void
     {
-        foreach ($handlers as $handler) {
-            if (is_subclass_of($handler, ResponseHandlerInterface::class)) {
-                $this->handlers[] = $handler;
-            }
-        }
-        return $this;
+        array_push(self::$registeredHandlers, ...$handlers);
     }
 
     public function respond(mixed $data, int $statusCode = null, array|string $context = null): ?ResponseInterface
     {
-        foreach ($this->handlers as $handler) {
-            try {
+        $handlers = self::$registeredHandlers;
 
+        $accepts = explode(',', $_SERVER['HTTP_ACCEPT'] ?? '*/*');
+        foreach ($accepts as $accept) {
+            $accept = strtolower(trim($accept));
+            foreach (self::$mimeTypeHandlers[$accept] ?? [] as $handler) {
+                $handlers[] = $handler;
+            }
+        }
+
+        foreach (array_unique($handlers) as $handler) {
+            if (is_subclass_of($handler, ResponseHandlerInterface::class)) {
                 if (is_string($handler)) {
-                    $handler = new $handler;
+                    $handler = app($handler, true);
                 }
 
-                $response = $handler->respond($data, $statusCode, $context);
-                if ($response instanceof ResponseInterface) {
-                    return $response;
+                if ($handler instanceof ResponseHandlerInterface) {
+                    $response = $handler->respond($data, $statusCode, $context);
+                    if ($response instanceof ResponseInterface) {
+                        return $response;
+                    }
                 }
-            } catch (\Throwable $ex) {
-                exit($ex);
             }
         }
 

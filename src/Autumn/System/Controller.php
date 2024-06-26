@@ -3,12 +3,15 @@
 namespace Autumn\System;
 
 use Autumn\I18n\Translation;
+use Autumn\Interfaces\ArrayInterface;
 use Autumn\Interfaces\ContextInterface;
+use Autumn\Traits\ArrayPropertiesTrait;
 use Autumn\Traits\ContextInterfaceTrait;
 
-class Controller implements ContextInterface
+class Controller implements ContextInterface, ArrayInterface
 {
     use ContextInterfaceTrait;
+    use ArrayPropertiesTrait;
 
     public const METHOD_GET = 'index';
     public const METHOD_POST = 'post';
@@ -45,6 +48,7 @@ class Controller implements ContextInterface
             $view = $this->viewPath . $view;
         }
 
+        $args = array_merge($this->toArray(), $args ?? []);
         $view = new View($view, $args, $context);
         $view->setTranslation($this->translation);
         return $view;

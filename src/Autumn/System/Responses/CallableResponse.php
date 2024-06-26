@@ -14,7 +14,7 @@ class CallableResponse extends Response
     private mixed $callable;
     private ?array $context = null;
 
-    public function __construct(callable $callable, int $statusCode = null, string $reasonPhrase = null, string $protocolVersion = null)
+    public function __construct(callable $callable, int $statusCode = null, string|array $reasonPhrase = null, string $protocolVersion = null)
     {
         parent::__construct(null,
             $statusCode,

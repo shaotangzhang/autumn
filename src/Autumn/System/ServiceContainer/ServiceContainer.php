@@ -98,18 +98,18 @@ class ServiceContainer implements ServiceContainerInterface
         // Fetch the binding for the abstract
         $binding = $this->bindings[$abstract] ?? null;
         if (!$binding) {
-            if ((env('USE_CLASS_DECORATOR_PROXY'))
-                && ($binding = DecoratorProxy::createProxyClass($abstract))
-            ) {
-                $this->bindings[$abstract] = $binding;
-            } else {
-                throw new \RuntimeException("Class '$abstract' is not bound.");
-            }
+            throw new \RuntimeException("Class '$abstract' is not bound.");
         }
 
         // Handle callable bindings (factories)
         if (is_callable($binding)) {
             return $this->instances[$abstract] = $this->invoke($binding, [], $this->contexts[$abstract] ?? []);
+        }
+
+        if (env('USE_CLASS_DECORATOR_PROXY')) {
+            if (($binding = DecoratorProxy::createProxyClass($abstract))) {
+                $this->bindings[$abstract] = $binding;
+            }
         }
 
         // Create a new instance of the concrete class
@@ -239,7 +239,8 @@ class ServiceContainer implements ServiceContainerInterface
         ParameterResolverInterface $resolver = null,
         array|\ArrayAccess         $args = null,
         array                      $context = null
-    ): mixed {
+    ): mixed
+    {
         $name = $parameter->getName();
 
         if ($resolver) {
@@ -258,7 +259,7 @@ class ServiceContainer implements ServiceContainerInterface
                     if ($value !== null) {
                         return $value;
                     }
-                } catch (AccessDeniedException | ForbiddenException | NotFoundException | UnauthorizedException $ex) {
+                } catch (AccessDeniedException|ForbiddenException|NotFoundException|UnauthorizedException $ex) {
                     throw $ex;
                 } catch (\Throwable $ex) {
                     // Log or handle the exception as needed

@@ -9,6 +9,7 @@ use Autumn\Logging\ConsoleLogger;
 use Autumn\System\Events\AppBootEvent;
 use Autumn\System\ServiceContainer\ServiceContainer;
 use Autumn\System\ServiceContainer\ServiceContainerInterface;
+use Autumn\System\ServiceContainer\ServiceProviderInterface;
 use Composer\Autoload\ClassLoader;
 use JetBrains\PhpStorm\NoReturn;
 use Psr\Http\Message\ResponseInterface;
@@ -75,6 +76,10 @@ class Application implements RequestHandlerInterface
      */
     private LoggerInterface $logger;
 
+    protected array $serviceProviders = [];
+
+    public \Closure $bootOnce;
+
     /**
      * Application constructor.
      *
@@ -95,17 +100,31 @@ class Application implements RequestHandlerInterface
         $this->root = dirname($reflection->getFileName(), 2);
 
         $this->loadConfig();
-        $this->configLogger();
         $this->configExtensions();
-        $this->configImplements();
-        $this->configMiddlewares();
+//        $this->configLogger();
+//        $this->configImplements();
+//        $this->configMiddlewares();
         $this->configRoutes();
 
-        Event::listen(AppBootEvent::class, function (AppBootEvent $event) {
-            if ($event->getApplication() === $this) {
-                $this->boot();
+        $this->bootOnce = function () {
+            unset($this->bootOnce);
+
+            $this->serviceProviders = array_unique($this->serviceProviders);
+
+            foreach ($this->serviceProviders as $index => $class) {
+                if (is_subclass_of($class, ServiceProviderInterface::class)) {
+                    $class::register($this->serviceContainer);
+                } else {
+                    unset($this->serviceProviders[$index]);
+                }
             }
-        });
+
+            foreach ($this->serviceProviders as $class) {
+                $class::boot($this);
+            }
+
+            Event::dispatch(new AppBootEvent($this));
+        };
     }
 
     /**
@@ -131,11 +150,6 @@ class Application implements RequestHandlerInterface
         }
 
         return self::$instance;
-    }
-
-    protected function boot(): void
-    {
-        $this->getLogger()->info('Application starts');
     }
 
     /**
@@ -202,10 +216,20 @@ class Application implements RequestHandlerInterface
             $extensions = include_once $file;
             if (is_iterable($extensions)) {
                 foreach ($extensions as $name => $extension) {
+                    if (is_int($name)) {
+                        if ($pos = strrpos($extension, '\\')) {
+                            $name = strtolower(substr($name, $pos + 1));
+                        } else {
+                            $name = $extension;
+                        }
+                    }
+
                     $this->registerExtension($name, $extension);
                 }
             }
         }
+
+        array_unshift($this->serviceProviders, ...array_values($this->registeredExtensions));
     }
 
     /**
@@ -336,29 +360,25 @@ class Application implements RequestHandlerInterface
      * Registers an extension.
      *
      * @param string $name Extension name.
-     * @param string|Extension $extension Extension class name or instance.
+     * @param string $extension Extension class name or instance.
      * @return void
-     * @throws SystemException if the extension is invalid or already registered.
      */
-    public function registerExtension(string $name, string|Extension $extension): void
+    public function registerExtension(string $name, string $extension): void
     {
-        $extensionClass = is_string($extension) ? $extension : $extension::class;
-
         if (isset($this->registeredExtensions[$name])) {
             throw SystemException::of('The extension name `%s` is used.', $name);
         }
 
-        if (in_array($extensionClass, $this->registeredExtensions)) {
-            throw SystemException::of('The extension `%s` is already registered.', $name);
-        }
-
         if (!is_subclass_of($extension, Extension::class)) {
-            throw SystemException::of('Invalid extension type `%s`.', $extensionClass);
+            throw SystemException::of('Invalid extension type `%s`.', $extension);
         }
 
-        $this->registerNamespace($extensionClass);
-        $extension::mount($this);
-        $this->registeredExtensions[$name] = $extensionClass;
+        if (in_array($extension, $this->registeredExtensions)) {
+            return;
+        }
+
+        $this->registeredExtensions[$name] = $extension;
+        $this->registerNamespace($extension, '..');
     }
 
     /**

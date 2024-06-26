@@ -9,4 +9,4 @@ use Autumn\Extensions\Cms\Cms;
 
 require_once __DIR__ . '/Cms.php';
 
-return Cms::context();
+return Cms::class;

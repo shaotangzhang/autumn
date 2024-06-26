@@ -6,6 +6,7 @@ use Autumn\App;
 use Autumn\I18n\Translation;
 use Autumn\Interfaces\Renderable;
 use Autumn\System\ClassFactory\DocComment;
+use Autumn\System\Controller;
 use Autumn\System\Extension;
 use Autumn\System\Responses\CallableResponse;
 use Autumn\System\Responses\RenderableResponse;
@@ -341,12 +342,25 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
 
             try {
                 $args = $view->toArray();
-                $result = (function () use ($args) {
+
+                $controller = $context[Controller::class] ?? null;
+                if ($controller instanceof Controller) {
+                    $args = $args + $controller->toArray();
+                }
+
+                $callback = (function () use ($args) {
                     extract($args);
                     return include func_get_arg(0);
                 })->call($view, $file);
 
-                $this->output($result, $args, $context);
+                // $context ??= $view->getContext();
+                if ($context['use_layout'] ?? $view->can('use_layout')) {
+                    unset($context['use_layout']);
+                    $callback = $this->compileLayout($view, $callback, $context) ?: $callback;
+                }
+
+                $this->output($callback, $args, $context);
+
             } finally {
                 Translation::global($origin);
             }

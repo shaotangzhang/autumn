@@ -51,6 +51,7 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
     private ?self $group = null;
     private array $variables = [];
     private mixed $handler = null;
+    private ?array $context = null;
 
     private ?MiddlewareGroup $middlewareGroup = null;
 
@@ -436,7 +437,7 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
             $result = $this->process($request);
         }
 
-        return ResponseService::context()->respond($result);
+        return ResponseService::context()->respond($result, null, $this->context);
     }
 
     protected function process(ServerRequestInterface $request): mixed
@@ -449,6 +450,8 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
             ServerRequestInterface::class => $request,
             ParameterResolverInterface::class => ParameterResolver::context()->addResolver($this)
         ];
+
+        $this->context =  &$context;
 
         if (is_callable($this->callback)) {
             return call($this->callback, $request, $context);
@@ -466,6 +469,8 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
 
                 if ($action && !str_starts_with($action, '_') && method_exists($class, $action)) {
                     if ($controller = $class::context()) {
+                        $context[Controller::class] = $controller;
+                        $context['controller_action'] = $action;
                         $this->callback = $controller->$action(...);
                         return call($this->callback, $request, $context);
                     }

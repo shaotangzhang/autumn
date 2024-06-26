@@ -70,7 +70,8 @@ final class App
 
         $class::main(...$_SERVER['argv'] ?? []);
         self::$application = new $class($classLoader);
-        Event::dispatch(new AppBootEvent(self::$application));
+        $bootOnce = self::$application->bootOnce;
+        $bootOnce();
         return self::$application;
     }
 

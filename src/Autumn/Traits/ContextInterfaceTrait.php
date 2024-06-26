@@ -27,8 +27,8 @@ trait ContextInterfaceTrait // implements ContextInterface
      */
     public static function context(): static
     {
-        if (isset(static::$instances[static::class])) {
-            return static::$instances[static::class];
+        if (isset(self::$instances[static::class])) {
+            return self::$instances[static::class];
         }
 
 //        if ($class = DecoratorProxy::createProxyClass(static::class)) {
@@ -37,7 +37,7 @@ trait ContextInterfaceTrait // implements ContextInterface
 //            }
 //        }
 
-        return static::$instances[static::class] = static::createDefaultInstance();
+        return self::$instances[static::class] = static::createDefaultInstance();
     }
 
     /**

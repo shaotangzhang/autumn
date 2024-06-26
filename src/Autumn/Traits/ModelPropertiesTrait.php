@@ -10,20 +10,20 @@ namespace Autumn\Traits;
 use Autumn\Attributes\Transient;
 use Autumn\System\Model;
 
-trait HasProperties
+trait ModelPropertiesTrait
 {
-    private static array $properties = [];
+    private static array $__properties__ = [];
 
-    private static array $getters = [];
+    private static array $__getters__ = [];
 
-    private static array $setters = [];
+    private static array $__setters__ = [];
 
     /**
      * @return array<string, \ReflectionProperty>
      */
     protected static function __properties__(): array
     {
-        if (!isset(self::$properties[static::class])) {
+        if (!isset(self::$__properties__[static::class])) {
             $transients = [];
 
             $reflection = new \ReflectionClass(static::class);
@@ -33,21 +33,21 @@ trait HasProperties
                     continue;
                 }
 
-                self::$properties[static::class][$property->getName()] = $property;
+                self::$__properties__[static::class][$property->getName()] = $property;
             }
 
             if ($parentClass = get_parent_class(static::class)) {
                 if (is_subclass_of($parentClass, Model::class)) {
                     foreach ($parentClass::__properties__() as $name => $property) {
                         if (!in_array($name, $transients)) {
-                            self::$properties[static::class][$name] = $property;
+                            self::$__properties__[static::class][$name] = $property;
                         }
                     }
                 }
             }
         }
 
-        return self::$properties[static::class];
+        return self::$__properties__[static::class];
     }
 
     protected static function __property_name__($property): string
@@ -61,27 +61,27 @@ trait HasProperties
     {
         $propertyName = static::__property_name__($property);
 
-        if (!(static::$getters[static::class][$property] ??= false)) {
+        if (!(static::$__getters__[static::class][$property] ??= false)) {
             if (method_exists(static::class, $func = 'get' . $propertyName)
                 || method_exists(static::class, $func = 'is' . $propertyName)) {
-                static::$getters[static::class][$property] = $func;
+                static::$__getters__[static::class][$property] = $func;
             }
         }
 
-        return static::$getters[static::class][$property] ?: null;
+        return static::$__getters__[static::class][$property] ?: null;
     }
 
     protected static function __setter__(string $property): ?string
     {
         $propertyName = static::__property_name__($property);
 
-        if (!(static::$setters[static::class][$property] ??= false)) {
+        if (!(static::$__setters__[static::class][$property] ??= false)) {
             if (method_exists(static::class, $func = 'set' . $propertyName)) {
-                static::$setters[static::class][$property] = $func;
+                static::$__setters__[static::class][$property] = $func;
             }
         }
 
-        return static::$setters[static::class][$property] ?: null;
+        return static::$__setters__[static::class][$property] ?: null;
     }
 
     public function __get(string $name): mixed

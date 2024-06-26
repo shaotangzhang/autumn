@@ -9,7 +9,6 @@ namespace App\Models\User;
 
 use Autumn\Database\Interfaces\RecyclableRepositoryInterface;
 use Autumn\Database\Traits\RecyclableEntityManagerTrait;
-use Autumn\Database\Traits\RecyclableEntityRepositoryTrait;
 use Autumn\Extensions\Auth\Models\UserEntity;
 
 class User extends UserEntity implements RecyclableRepositoryInterface

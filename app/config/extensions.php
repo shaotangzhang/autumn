@@ -7,6 +7,8 @@
 
 return [
 
+    'auth' => include_once DOC_ROOT . '/src/extensions/auth/src/extension.php',
+
     'cms' => include_once DOC_ROOT . '/src/extensions/cms/src/extension.php'
 
 ];

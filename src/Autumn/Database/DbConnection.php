@@ -8,17 +8,15 @@
 namespace Autumn\Database;
 
 use Autumn\Database\Interfaces\DriverInterface;
-use Autumn\Exceptions\SystemException;
 use Autumn\Interfaces\ContextInterface;
 use Autumn\Traits\ContextInterfaceTrait;
-use Autumn\Traits\HasProperties;
 
 class DbConnection implements ContextInterface
 {
-    use HasProperties;
     use ContextInterfaceTrait;
 
     private string $suffix;
+    private array $properties = [];
     private ?DriverInterface $driver = null;
 
     public function __construct(private readonly ?string $name = null, private readonly ?array $options = null)
@@ -243,37 +241,6 @@ class DbConnection implements ContextInterface
 
         return $this->execute($sql, $parameters) ?? 0;
     }
-
-//    /**
-//     * @throws \Throwable
-//     */
-//    public function transactional(\Closure $callback, \Closure $fallback = null, \Closure $complete = null): mixed
-//    {
-//        try {
-//            $this->beginTransaction();
-//
-//            $result = call_user_func($callback, $this);
-//            $this->commit();
-//        } catch (\Throwable $result) {
-//            $this->rollback();
-//
-//            if ($fallback) {
-//                $result = call_user_func($fallback) ?: $result;
-//            }
-//        } finally {
-//            if ($complete) {
-//                call_user_func($complete);
-//            }
-//        }
-//
-//        if (isset($result)) {
-//            if ($result instanceof \Throwable) {
-//                throw $result;
-//            }
-//        }
-//
-//        return $result;
-//    }
 
     /**
      * Begins a new database transaction.

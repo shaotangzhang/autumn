@@ -1,9 +1,13 @@
 <?php
 
-return function (string $name) { ?>
+/**
+ * @layout
+ */
+return function () { ?>
 
-    <h1><?= t('welcome_message', $name) ?></h1>
+    <h1><?= t('welcome_message', $this->name) ?></h1>
 
+    <p><?= $this->title ?></p>
     <?php
 };
 

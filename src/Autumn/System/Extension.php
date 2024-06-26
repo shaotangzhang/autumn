@@ -3,52 +3,52 @@
 namespace Autumn\System;
 
 use Autumn\App;
-use Autumn\Interfaces\SingletonInterface;
+use Autumn\Interfaces\ContextInterface;
 use Autumn\System\ServiceContainer\ServiceContainerInterface;
 use Autumn\System\ServiceContainer\ServiceProviderInterface;
+use Autumn\Traits\ContextInterfaceTrait;
 
 /**
- * Class Extension
- *
- * Represents an extension module within the application.
+ * Base class for application extensions.
  */
-abstract class Extension extends Service implements ServiceProviderInterface
+abstract class Extension implements ContextInterface, ServiceProviderInterface
 {
-    public const VERSION = "1.0.0";
-    public const REQUIRED_EXTENSIONS = [];
-    public const REQUIRED_MIDDLEWARES = [];
-    public const REGISTERED_SERVICES = [];
-    public const REGISTERED_ENTITIES = [];
-    private static array $extensionRoots = [];
-
-    private ?ServiceContainerInterface $container = null;
-
-    private static ?array $configurations = null;
+    use ContextInterfaceTrait;
 
     /**
-     * Extension constructor.
-     *
-     * Registers the extension with the application and adds required middlewares.
+     * The version of the extension.
      */
-    public final function __construct()
-    {
-        if (self::$configurations === null) {
-            self::$configurations = [];
+    public const VERSION = "1.0.0";
 
-            if ($file = realpath(static::path('config', '.env'))) {
-                $data = parse_ini_file($file, true);
-                if (is_array($data)) {
-                    self::$configurations = $data;
-                }
-            }
-        }
-    }
+    /**
+     * List of required extensions and their minimum versions.
+     */
+    public const REQUIRED_EXTENSIONS = [];
 
-    protected static function createDefaultInstance(): static
-    {
-        static::verifyExtensionRequirements();
-        return new static;
-    }
+    /**
+     * List of required middlewares that should be applied to the application.
+     */
+    public const REQUIRED_MIDDLEWARES = [];
+
+    /**
+     * List of services to be registered with the service container.
+     */
+    public const REGISTERED_SERVICES = [];
+
+    /**
+     * List of entities or other resources registered by the extension.
+     */
+    public const REGISTERED_ENTITIES = [];
+
+    /**
+     * Storage for extension root paths.
+     */
+    private static array $extensionRoots = [];
+
+    /**
+     * Configuration data for the extension.
+     */
+    private static array $configurations = [];
 
     /**
      * Verifies if all required extensions are mounted and their versions are compatible.
@@ -73,16 +73,37 @@ abstract class Extension extends Service implements ServiceProviderInterface
         }
     }
 
+    /**
+     * Retrieves a configuration value from the extension's configurations.
+     *
+     * @param string $key The configuration key to retrieve.
+     * @param mixed $default Optional. Default value if key does not exist.
+     *
+     * @return mixed The configuration value, or $default if key is not found.
+     */
     public static function env(string $key, mixed $default = null): mixed
     {
-        return self::$configurations[$key] ?? $default;
+        if (!isset(self::$configurations[static::class])) {
+            self::$configurations = [];
+
+            // Load configurations from the config/.env file
+            if ($file = realpath(static::path('config', '.env'))) {
+                $data = parse_ini_file($file, true);
+                if (is_array($data)) {
+                    self::$configurations[static::class] = $data;
+                }
+            }
+        }
+
+        return self::$configurations[static::class][$key] ?? $default;
     }
 
     /**
      * Retrieves the filesystem path for the extension.
      *
      * @param string ...$args Additional path segments to append.
-     * @return string The filesystem path.
+     *
+     * @return string The filesystem path for the extension.
      */
     public static function path(string ...$args): string
     {
@@ -99,7 +120,8 @@ abstract class Extension extends Service implements ServiceProviderInterface
      * Retrieves the real filesystem path for the extension.
      *
      * @param string ...$args Additional path segments to append.
-     * @return string The real filesystem path.
+     *
+     * @return string The real filesystem path for the extension.
      */
     public static function realpath(string ...$args): string
     {
@@ -107,41 +129,37 @@ abstract class Extension extends Service implements ServiceProviderInterface
     }
 
     /**
-     * Factory method to retrieve instances from the extension's container or singletons.
+     * Registers services provided by the extension with the service container.
      *
-     * @param string $abstract The abstract service or class name.
-     * @return mixed|null The resolved instance or null if not found.
+     * @param ServiceContainerInterface $container The service container to register services with.
      */
-    public static function factory(string $abstract): mixed
+    public static function register(ServiceContainerInterface $container): void
     {
-        if ($container = static::context()->container) {
-            if ($container->isBound($abstract)) {
-                return $container->make($abstract);
-            }
-        }
+        static::verifyExtensionRequirements();
 
-        if (is_subclass_of($abstract, SingletonInterface::class)) {
-            return $abstract::getInstance();
-        }
-
-        return null;
-    }
-
-    /**
-     * Performs additional mounting operations specific to the extension.
-     *
-     * @param Application $application
-     */
-    public static function mount(Application $application): void
-    {
-        $application->applyMiddleware(...self::REQUIRED_MIDDLEWARES);
-
-        $container = $application->getServiceContainer();
         foreach (self::REGISTERED_SERVICES as $service => $concrete) {
             $container->bind($service, $concrete);
         }
     }
 
+    /**
+     * Boots the extension by applying required middlewares to the application.
+     *
+     * @param Application $application The application instance to apply middlewares to.
+     */
+    public static function boot(Application $application): void
+    {
+        $application->applyMiddleware(...self::REQUIRED_MIDDLEWARES);
+    }
+
+    /**
+     * Loads routes from configuration files based on application name and prefix.
+     *
+     * @param string $prefix The route prefix to apply to loaded routes.
+     * @param array|null $options Optional. Additional options for route loading.
+     *
+     * @return Route|null The loaded Route object, or null if no routes were loaded.
+     */
     public static function routes(string $prefix, array $options = null): ?Route
     {
         if ($appName = strtolower(App::name())) {
