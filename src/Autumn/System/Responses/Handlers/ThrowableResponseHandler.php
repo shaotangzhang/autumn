@@ -1,9 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        18/06/2024
- */
 
 namespace Autumn\System\Responses\Handlers;
 
@@ -15,23 +10,37 @@ use Autumn\System\View;
 use Autumn\Traits\ContextInterfaceTrait;
 use Psr\Http\Message\ResponseInterface;
 
+/**
+ * ThrowableResponseHandler class that handles responses for Throwable objects.
+ * This class implements the ContextInterface and ResponseHandlerInterface.
+ */
 class ThrowableResponseHandler implements ContextInterface, ResponseHandlerInterface
 {
     use ContextInterfaceTrait;
 
-    public function respond(mixed $data, int $statusCode = null, array|string $context = null): ?ResponseInterface
+    /**
+     * Respond with appropriate response for Throwable objects.
+     *
+     * @param mixed $data The data to be included in the response.
+     * @param int|null $statusCode The HTTP status code.
+     * @param array|null $context Additional context or headers.
+     * @return ResponseInterface|null The generated response or null if not handled.
+     */
+    public function respond(mixed $data, int $statusCode = null, array $context = null): ?ResponseInterface
     {
         if ($data instanceof \Throwable) {
 
-            // Handle Throwable response
-            if (($_SERVER['HTTP_ACCEPT'] ?? null) === 'application/json') {
-                // Handle JSON response for Throwable
-                return JsonResponseHandler::context()->respond($data, $statusCode, $context);
+            // Handle JSON response for Throwable
+            switch ($_SERVER['HTTP_ACCEPT'] ?? null) {
+                case 'application/json':
+                    return JsonResponseHandler::context()->respond($data, $statusCode, $context);
+                case 'text/xml':
+                    return XMLDocumentResponseHandler::context()->respond($data, $statusCode, $context);
+                // add more ...
             }
 
-            // Handle other response types
+            // Handle RedirectException
             if ($data instanceof RedirectException) {
-                // Handle RedirectException
                 return new RedirectResponse($data->getLocation(), $data->getCode(), $data->getMessage());
             }
 
@@ -44,9 +53,11 @@ class ThrowableResponseHandler implements ContextInterface, ResponseHandlerInter
                     echo $data->getMessage() ?: ('Server exception: ' . $data::class);
                 }
             };
+
             return ViewResponseHandler::context()->respond($view, $statusCode, $context);
         }
 
+        // Return null if the data is not handled by this handler
         return null;
     }
 }

@@ -1,13 +1,12 @@
 <?php
+
 namespace Autumn\Http\Message;
 
 use Psr\Http\Message\ResponseInterface;
 
 trait ResponseTrait
 {
-    use MessageTrait {
-        setHeader as protected;
-    }
+    use MessageTrait;
 
     private int $statusCode = 0;
     private string $reasonPhrase = '';
@@ -28,6 +27,11 @@ trait ResponseTrait
     public function isSuccessful(): bool
     {
         return $this->statusCode >= 200 && $this->statusCode < 300;
+    }
+
+    public function isError(): bool
+    {
+        return $this->statusCode >= 400 && $this->statusCode < 600;
     }
 
     public function getStatusCode(): int
@@ -55,7 +59,7 @@ trait ResponseTrait
     /**
      * @param int $statusCode
      */
-    private function setStatusCode(int $statusCode): void
+    protected function setStatusCode(int $statusCode): void
     {
         $this->statusCode = $statusCode;
     }
@@ -63,7 +67,7 @@ trait ResponseTrait
     /**
      * @param string $reasonPhrase
      */
-    private function setReasonPhrase(string $reasonPhrase): void
+    protected function setReasonPhrase(string $reasonPhrase): void
     {
         $this->reasonPhrase = $reasonPhrase;
     }

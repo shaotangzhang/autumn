@@ -28,7 +28,7 @@ trait HeadersTrait
         return implode(',', $this->getHeader($name));
     }
 
-    private static function formatHeaderValue(mixed $value): array
+    protected static function formatHeaderValue(mixed $value): array
     {
         if (!is_array($value)) {
 
@@ -101,7 +101,7 @@ trait HeadersTrait
      * @param string $name
      * @return string
      */
-    private static function formatHeaderName(string $name): string
+    protected static function formatHeaderName(string $name): string
     {
         // Replaces non-alphanumeric characters with a space
         $temp = preg_replace('/[^a-z0-9]+/i', ' ', $name);
@@ -111,7 +111,7 @@ trait HeadersTrait
         return str_replace(' ', '-', strtolower($temp));
     }
 
-    private function addHeader(string $name, string ...$values): static
+    protected function addHeader(string $name, string ...$values): static
     {
         $headerName = self::formatHeaderName($name);
         $this->headers[$headerName] ??= [];
@@ -119,12 +119,12 @@ trait HeadersTrait
         return $this;
     }
 
-    private function setHeader(string $name, string ...$values): void
+    protected function setHeader(string $name, string ...$values): void
     {
         $this->headers[self::formatHeaderName($name)] = $values;
     }
 
-    private function setHeaders(array $headers): void
+    protected function setHeaders(array $headers): void
     {
         foreach ($headers as $name => $values) {
             $headerName = self::formatHeaderName($name);
@@ -141,7 +141,7 @@ trait HeadersTrait
         }
     }
 
-    private function withHeaders(array $headers): static
+    protected function withHeaders(array $headers): static
     {
         $clone = clone $this;
         $clone->setHeaders($headers);

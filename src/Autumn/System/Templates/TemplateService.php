@@ -353,7 +353,6 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
                     return include func_get_arg(0);
                 })->call($view, $file);
 
-                // $context ??= $view->getContext();
                 if ($context['use_layout'] ?? $view->can('use_layout')) {
                     unset($context['use_layout']);
                     $callback = $this->compileLayout($view, $callback, $context) ?: $callback;

@@ -11,5 +11,5 @@ use Autumn\System\View;
 
 interface TemplateEngineInterface
 {
-    public function outputView(View $data, ?array $context): void;
+    public function outputView(View $view, array $context=null): void;
 }

@@ -1,9 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        18/06/2024
- */
 
 namespace Autumn\System\Responses\Handlers;
 
@@ -11,33 +6,40 @@ use Autumn\Database\Interfaces\RepositoryInterface;
 use Autumn\Exceptions\RedirectException;
 use Autumn\Interfaces\ArrayInterface;
 use Autumn\Interfaces\ContextInterface;
+use Autumn\Interfaces\MultipleExceptionInterface;
 use Autumn\System\Responses\JsonResponse;
 use Autumn\System\Responses\ResponseHandlerInterface;
 use Autumn\Traits\ContextInterfaceTrait;
 use Psr\Http\Message\ResponseInterface;
 
+/**
+ * JsonResponseHandler class that handles responses with JSON content.
+ * This class implements the ContextInterface and ResponseHandlerInterface.
+ */
 class JsonResponseHandler implements ContextInterface, ResponseHandlerInterface
 {
     use ContextInterfaceTrait;
 
+    /**
+     * Respond with a JSON representation of the provided data.
+     *
+     * @param mixed $data The data to be included in the response.
+     * @param int|null $statusCode The HTTP status code.
+     * @param array|null $context Additional context or headers.
+     * @return ResponseInterface|null The generated response or null if not handled.
+     */
     public function respond(mixed $data, int $statusCode = null, array $context = null): ?ResponseInterface
     {
-        $reasonPhrase = $context['reasonPhrase'] ?? $context['message'] ?? null;
-
         if (is_object($data)) {
             if ($data instanceof \Throwable) {
-                $data = [
-                    'code' => $data->getCode(),
-                    'message' => $data->getMessage(),
-                    'redirect' => ($data instanceof RedirectException) ? $data->getLocation() : null,
-                ];
-                $reasonPhrase ??= $data['message'];
+                // Handle Throwable objects, such as exceptions
+                $data = $this->convertThrowableToJSON($data);
                 $statusCode ??= $data['code'];
             } elseif ($data instanceof ArrayInterface) {
-                // model, view, entities, ...
+                // Handle objects implementing ArrayInterface
                 $data = ['data' => $data->toArray()];
             } elseif ($data instanceof RepositoryInterface) {
-                // query
+                // Handle objects implementing RepositoryInterface
                 $data = ['data' => [
                     'items' => iterator_to_array($data),
                     'pagination' => $data->paginate(),
@@ -46,9 +48,53 @@ class JsonResponseHandler implements ContextInterface, ResponseHandlerInterface
         }
 
         if (is_scalar($data) || is_array($data) || is_null($data) || ($data instanceof \JsonSerializable)) {
-            return new JsonResponse($data, $statusCode, $reasonPhrase);
+            // Handle scalar, array, null, or JsonSerializable data
+            return new JsonResponse($data, $statusCode);
         }
 
+        // Return null if the data is not handled by this handler
         return null;
+    }
+
+    public function convertThrowableToJSON(\Throwable $exception): array
+    {
+        $data = [
+            'code' => $exception->getCode(),
+            'message' => $exception->getMessage(),
+        ];
+
+        if ($exception instanceof RedirectException) {
+            $data['redirect'] = $exception->getLocation();
+        }
+
+        if ($exception instanceof MultipleExceptionInterface) {
+            foreach ($exception->getErrors() as $error) {
+                $data['errors'][] = [
+                    'code' => $error->getCode(),
+                    'message' => $error->getMessage(),
+                ];
+            }
+        }
+
+        if (env('DEBUG')) {
+            $data['file'] = $exception->getFile();
+            $data['line'] = $exception->getLine();
+
+            foreach ($exception->getTrace() as $index => $traceItem) {
+                $trace = [];
+                if (isset($traceItem['file'])) {
+                    $trace['file'] = $traceItem['file'];
+                }
+                if (isset($traceItem['line'])) {
+                    $trace['line'] = $traceItem['line'];
+                }
+                if (isset($traceItem['function'])) {
+                    $trace['function'] = $traceItem['function'];
+                }
+                $data['trace'][] = $trace;
+            }
+        }
+
+        return $data;
     }
 }
