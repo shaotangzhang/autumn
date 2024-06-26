@@ -28,9 +28,20 @@ class Db
     public const FETCH_BOTH = 4;
     public const FETCH_DATA = 9;
 
+    /**
+     * @var array<string, DbConnection>
+     */
     private static array $pool = [];
 
+    /**
+     * @var array
+     */
     private static array $histories = [];
+
+    /**
+     * @var DbTransaction[]
+     */
+    private static array $transactions = [];
 
     public static function of(string $connectionName = null): ?DbConnection
     {
@@ -83,28 +94,36 @@ class Db
         return null;
     }
 
-    public static function getConnectionOf(string|DbConnection $connection = null): DbConnection|string|null
+
+    public static function getConnectionOf(string|DbConnection $connection = null): DbConnection
     {
-        if (is_string($db = $connection)) {
+        if (is_string($connection)) {
             $db = static::of($connection);
             if (!$db) {
-                throw SystemException::of('No database connection is configured.');
+                throw SystemException::of('No database connection named %s is configured.', $connection);
             }
         } elseif (!$connection) {
             $db = static::of();
             if (!$db) {
-                throw SystemException::of('No database connection is configured.');
+                throw SystemException::of('No default database connection is configured.');
             }
+        } else {
+            $db = $connection;
         }
         return $db;
     }
 
-    public static function transaction(callable $process, string|DbConnection $connection = null): mixed
+    /**
+     * Reuses the existing instance of a transaction for the given database connection, or creates a new one if none exists.
+     *
+     * @param string|DbConnection|null $connection The database connection or its name.
+     * @return DbTransaction The transaction instance.
+     * @throws SystemException If no database connection is configured or found.
+     */
+    public static function transaction(string|DbConnection $connection = null): DbTransaction
     {
         $db = static::getConnectionOf($connection);
-
-
-
+        return self::$transactions[$db->getName()] ??= new DbTransaction($db);
     }
 
     /** for Database ORM << **/

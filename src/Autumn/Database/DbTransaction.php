@@ -5,228 +5,135 @@ namespace Autumn\Database;
 use Autumn\Exceptions\SystemException;
 use Throwable;
 
+
+//// 假设有两个数据库连接 $pdo1 和 $pdo2
+//
+//try {
+//    // 开始全局事务
+//    $pdo1->beginTransaction();    DONE
+//    $pdo2->beginTransaction();    DONE
+//
+//    // 执行跨连接的操作
+//    $pdo1->exec("INSERT INTO table1 ...");    DONE
+//    $pdo2->exec("INSERT INTO table2 ...");    DONE
+//
+//    // 准备阶段
+//    $pdo1->exec("XA START 'transaction_id'");    DONE
+//    $pdo2->exec("XA START 'transaction_id'");    DONE
+//
+//    // 执行具体操作
+//    $pdo1->exec("INSERT INTO table1 ...");    DONE
+//    $pdo2->exec("INSERT INTO table2 ...");    DONE
+//
+//    // 准备提交
+//    $pdo1->exec("XA END 'transaction_id'");    DONE
+//    $pdo1->exec("XA PREPARE 'transaction_id'");
+//    $pdo2->exec("XA END 'transaction_id'");    DONE
+//    $pdo2->exec("XA PREPARE 'transaction_id'");
+//
+//    // 提交阶段
+//    $pdo1->exec("XA COMMIT 'transaction_id'");
+//    $pdo2->exec("XA COMMIT 'transaction_id'");
+//
+//} catch (Exception $e) {
+//    // 出现错误时回滚
+//    $pdo1->exec("XA ROLLBACK 'transaction_id'");
+//    $pdo2->exec("XA ROLLBACK 'transaction_id'");
+//}
+
+
 /**
  * Class DbTransaction
  *
- * This class manages transactions across multiple database connections, including XA transactions and savepoints.
+ * This class manages transactions on a single database connection, including nested transactions using savepoints.
  */
 class DbTransaction
 {
     /**
-     * @var DbConnection[] $connections Holds the database connections involved in the transaction.
+     * @var DbConnection The database connection.
      */
-    private array $connections = [];
+    private DbConnection $connection;
 
     /**
-     * @var array $innerSavePoints Holds the save points for each connection.
+     * @var array Holds the savepoints.
      */
-    private array $innerSavePoints = [];
+    private array $savePoints = [];
 
     /**
-     * @var int $counter A counter used for generating unique XID and savepoint names.
+     * @var int A counter used for generating unique savepoint names.
      */
     private int $counter = 0;
 
     /**
-     * @var DbConnection|null A connection as default
-     */
-    private ?DbConnection $defaultConnection;
-
-    /**
      * Constructor
      *
-     * @param DbConnection|null $connection
+     * @param DbConnection $connection The database connection.
      */
-    public function __construct(DbConnection $connection = null)
+    public function __construct(DbConnection $connection)
     {
-        $this->defaultConnection = $connection;
+        $this->connection = $connection;
     }
 
     /**
-     * Begins a transaction on the given connection.
-     * For the first connection, it simply starts a transaction.
-     * For additional connections, it starts an XA transaction.
-     * If the connection is already part of the transaction, it creates a savepoint.
-     *
-     * @param DbConnection|null $connection The database connection.
+     * Begins a transaction, creating a savepoint if nested.
      */
-    public function begin(DbConnection $connection = null): void
+    public function begin(): void
     {
-        if (!($connection ??= $this->defaultConnection)) {
-            return;
-        }
-
-        $xid = array_search($connection, $this->connections, true);
-        if ($xid === false) {
-            $xid = 'XID' . $this->counter++;
-            $this->connections[$xid] = $connection;
-            $connection->beginTransaction();
-            $this->startTransaction($connection, $xid);
+        if ($this->counter === 0) {
+            $this->connection->beginTransaction();
         } else {
-            $this->createSavePoint($connection, $xid);
+            $savePointName = 'savePoint' . $this->counter;
+            $this->connection->createSavePoint($savePointName);
+            $this->savePoints[] = $savePointName;
         }
+        $this->counter++;
     }
 
     /**
-     * Commits the transaction on the given connection, releasing the most recent savepoint if present.
-     *
-     * @param DbConnection|null $connection The database connection.
-     * @return bool True if the savepoint was released, false otherwise.
+     * Commits the transaction, releasing the most recent savepoint if nested.
      */
-    public function commit(DbConnection $connection = null): bool
+    public function commit(): void
     {
-        if (!($connection ??= $this->defaultConnection)) {
-            return false;
+        if ($this->counter === 1) {
+            $this->connection->commit();
+        } else {
+            $savePointName = array_pop($this->savePoints);
+            $this->connection->releaseSavePoint($savePointName);
         }
+        $this->counter--;
+    }
 
-        if ($this->handleSavePoint($connection, 'releaseSavePoint') !== false) {
-            if (in_array($connection, $this->connections)) {
-                $connection->commit();
-                return true;
-            }
+    /**
+     * Rolls back the transaction to the most recent savepoint if nested.
+     */
+    public function rollback(): void
+    {
+        if ($this->counter === 1) {
+            $this->connection->rollback();
+        } else {
+            $savePointName = array_pop($this->savePoints);
+            $this->connection->rollbackToSavePoint($savePointName);
         }
-
-        return false;
+        $this->counter--;
     }
 
     /**
-     * Rolls back the transaction on the given connection to the most recent savepoint if present.
-     *
-     * @param DbConnection|null $connection The database connection.
-     * @return bool True if the savepoint was rolled back, false otherwise.
-     */
-    public function rollback(DbConnection $connection = null): bool
-    {
-        if (!($connection ??= $this->defaultConnection)) {
-            return false;
-        }
-
-        if ($this->handleSavePoint($connection, 'rollbackToSavePoint') !== false) {
-            if (in_array($connection, $this->connections)) {
-                $connection->rollback();
-                return true;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Handles save points for commit and rollback operations.
-     *
-     * @param DbConnection $connection The database connection.
-     * @param string $action The action to perform ('release' or 'forgive').
-     * @return bool|null True if the savepoint was handled, false otherwise.
-     */
-    private function handleSavePoint(DbConnection $connection, string $action): ?bool
-    {
-        if ($xid = array_search($connection, $this->connections, true)) {
-            return $this->$action($xid);
-        }
-        return null;
-    }
-
-    /**
-     * Starts a transaction or XA transaction on the given connection.
-     *
-     * @param DbConnection $connection The database connection.
-     * @param string $xid The transaction ID.
-     */
-    private function startTransaction(DbConnection $connection, string $xid): void
-    {
-        switch (count($this->connections)) {
-            case 1:
-                break;
-            case 2:
-                foreach ($this->connections as $xid => $db) {
-                    if (!$db->startCrossTransaction($xid)) {
-                        throw new SystemException('Unable to start a transaction on connection `%s`.', $db->getName());
-                    }
-                }
-                break;
-            default:
-                if (!$connection->startCrossTransaction($xid)) {
-                    throw new SystemException('Unable to start a transaction on connection `%s`.', $connection->getName());
-                }
-        }
-    }
-
-    /**
-     * Creates a savepoint on the given connection.
-     *
-     * @param DbConnection $connection The database connection.
-     * @param string $xid The transaction ID.
-     */
-    private function createSavePoint(DbConnection $connection, string $xid): void
-    {
-        $savePointName = 'savePoint' . $this->counter++;
-        $this->innerSavePoints[$xid][] = $savePointName;
-        $connection->createSavePoint($savePointName);
-    }
-
-    /**
-     * Releases the most recent savepoint on the given connection.
-     *
-     * @param string $xid The transaction ID.
-     * @return bool|null True if the savepoint was released, false otherwise.
-     */
-    private function releaseSavePoint(string $xid): ?bool
-    {
-        return $this->manageSavePoint($xid, 'releaseSavePoint');
-    }
-
-    /**
-     * Rolls back to the most recent savepoint on the given connection.
-     *
-     * @param string $xid The transaction ID.
-     * @return bool|null True if the savepoint was rolled back, false otherwise.
-     */
-    private function rollbackToSavePoint(string $xid): ?bool
-    {
-        return $this->manageSavePoint($xid, 'rollbackToSavePoint');
-    }
-
-    /**
-     * Manages savepoints by executing the specified action.
-     *
-     * @param string $xid The transaction ID.
-     * @param string $action The action to perform ('RELEASE SAVEPOINT' or 'ROLLBACK TO SAVEPOINT').
-     * @return bool|null True if the action was successful, false otherwise.
-     */
-    private function manageSavePoint(string $xid, string $action): ?bool
-    {
-        if ($connection = $this->connections[$xid] ?? null) {
-            if ($savePoints = $this->innerSavePoints[$xid] ?? null) {
-                if ($savePoint = array_pop($savePoints)) {
-                    return $connection->$action($savePoint);
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Submits all transactions by releasing their save points.
+     * Submits all transactions by releasing their savepoints.
      */
     private function submit(): void
     {
-        foreach ($this->connections as $xid => $connection) {
-            if ($this->releaseSavePoint($xid) !== false) {
-                $connection->commit();
-            }
+        while ($this->counter > 1) {
+            $this->commit();
         }
     }
 
     /**
-     * Cancels all transactions by rolling back to their save points.
+     * Cancels all transactions by rolling back to their savepoints.
      */
     private function cancel(): void
     {
-        foreach ($this->connections as $xid => $connection) {
-            if ($this->rollbackToSavePoint($xid) !== false) {
-                $connection->rollback();
-            }
+        while ($this->counter > 1) {
+            $this->rollback();
         }
     }
 
@@ -235,36 +142,23 @@ class DbTransaction
      * Submits the transaction if the function succeeds, otherwise cancels the transaction.
      *
      * @param callable $func The function to call.
+     * @param array|null $args The arguments to pass to the function.
      * @return mixed The result of the function call.
-     * @throws Throwable If the function throws an exception.
+     * @throws \Throwable If the function throws an exception.
      */
-    public function process(callable $func): mixed
+    public function process(callable $func, array $args = null): mixed
     {
+        $this->begin();
         try {
-            $this->begin();
-            $result = call_user_func($func, $this);
-            $this->submit();
+            $result = call_user_func_array($func, $args ?? []);
+            $this->commit();
             return $result;
-        } catch (Throwable $ex) {
-            $this->cancel();
+        } catch (\Throwable $ex) {
+            $this->rollback();
             throw $ex;
         } finally {
-            $this->finalize();
+            $this->counter = 0;
+            $this->savePoints = [];
         }
-    }
-
-    /**
-     * Finalizes the transaction by ending all XA transactions and clearing internal state.
-     */
-    private function finalize(): void
-    {
-        if (count($this->connections) > 1) {
-            foreach ($this->connections as $xid => $connection) {
-                $connection->endCrossTransaction($xid);
-            }
-        }
-        $this->connections = [];
-        $this->innerSavePoints = [];
-        $this->counter = 0;
     }
 }

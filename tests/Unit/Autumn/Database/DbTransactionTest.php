@@ -13,12 +13,10 @@ use PHPUnit\Framework\TestCase;
 class DbTransactionTest extends TestCase
 {
     private $dbConnectionMock;
-    private $dbConnectionMockOther;
 
     protected function setUp(): void
     {
         $this->dbConnectionMock = $this->createMock(DbConnection::class);
-        $this->dbConnectionMockOther = $this->createMock(DbConnection::class);
     }
 
     public function testBeginTransaction()
@@ -53,110 +51,100 @@ class DbTransactionTest extends TestCase
         $transaction->rollback();
     }
 
-    public function testStartCrossTransaction()
-    {
-        $this->expectException(SystemException::class);
-
-        $transaction = new DbTransaction($this->dbConnectionMock);
-        $xid = 'XID0';
-
-        $this->dbConnectionMock->expects($this->once())
-            ->method('startCrossTransaction')
-            ->with($xid)
-            ->willReturn(true);
-
-        $transaction->begin($this->dbConnectionMock);
-        $transaction->begin($this->dbConnectionMockOther);
-    }
-
     public function testCreateSavePoint()
     {
         $transaction = new DbTransaction($this->dbConnectionMock);
-        $savePointName = 'savePoint1';
+
+        $this->dbConnectionMock->expects($this->once())
+            ->method('beginTransaction');
 
         $this->dbConnectionMock->expects($this->once())
             ->method('createSavePoint')
-            ->with($savePointName)
-            ->willReturn(true);
+            ->with('savePoint1');
 
-        $transaction->begin($this->dbConnectionMock);
-        $transaction->begin($this->dbConnectionMock);
-        // $transaction->createSavePoint($this->dbConnectionMock, $savePointName);
+        $transaction->begin();
+        $transaction->begin();
     }
 
     public function testReleaseSavePoint()
     {
         $transaction = new DbTransaction($this->dbConnectionMock);
-        $savePointName = 'savePoint1';
+
+        $this->dbConnectionMock->expects($this->once())
+            ->method('beginTransaction');
+
+        $this->dbConnectionMock->expects($this->once())
+            ->method('createSavePoint')
+            ->with('savePoint1');
 
         $this->dbConnectionMock->expects($this->once())
             ->method('releaseSavePoint')
-            ->with($savePointName)
-            ->willReturn(true);
+            ->with('savePoint1');
 
-        $transaction->begin($this->dbConnectionMock);
-        $transaction->begin($this->dbConnectionMock);
-        // $transaction->createSavePoint($this->dbConnectionMock, $savePointName);
-        $this->assertTrue($transaction->commit($this->dbConnectionMock));
+        $transaction->begin();
+        $transaction->begin();
+        $transaction->commit();
     }
 
     public function testRollbackToSavePoint()
     {
         $transaction = new DbTransaction($this->dbConnectionMock);
-        $savePointName = 'savePoint1';
 
         $this->dbConnectionMock->expects($this->once())
-            ->method('rollbackToSavePoint')
-            ->with($savePointName)
-            ->willReturn(true);
-
-        $transaction->begin($this->dbConnectionMock);
-        $transaction->begin($this->dbConnectionMock);
-        // $transaction->createSavePoint($this->dbConnectionMock, $savePointName);
-        $this->assertTrue($transaction->rollback($this->dbConnectionMock));
-    }
-
-    public function testSubmit()
-    {
-        $transaction = new DbTransaction($this->dbConnectionMock);
-        $savePointName = 'savePoint1';
+            ->method('beginTransaction');
 
         $this->dbConnectionMock->expects($this->once())
             ->method('createSavePoint')
-            ->with($savePointName)
-            ->willReturn(true);
-
-        $this->dbConnectionMock->expects($this->once())
-            ->method('releaseSavePoint')
-            ->with($savePointName)
-            ->willReturn(true);
-
-        $transaction->begin($this->dbConnectionMock);
-        $transaction->begin($this->dbConnectionMock);
-        // $transaction->createSavePoint($this->dbConnectionMock, $savePointName);
-        $transaction->commit();
-    }
-
-    public function testCancel()
-    {
-        $transaction = new DbTransaction($this->dbConnectionMock);
-        $savePointName = 'savePoint1';
-
-        $this->dbConnectionMock->expects($this->once())
-            ->method('createSavePoint')
-            ->with($savePointName)
-            ->willReturn(true);
+            ->with('savePoint1');
 
         $this->dbConnectionMock->expects($this->once())
             ->method('rollbackToSavePoint')
-            ->with($savePointName)
-            ->willReturn(true);
+            ->with('savePoint1');
 
-        $transaction->begin($this->dbConnectionMock);
-        $transaction->begin($this->dbConnectionMock);
-        //$transaction->createSavePoint($this->dbConnectionMock, $savePointName);
+        $transaction->begin();
+        $transaction->begin();
         $transaction->rollback();
     }
+
+//    public function testSubmit()
+//    {
+//        $transaction = new DbTransaction($this->dbConnectionMock);
+//
+//        $this->dbConnectionMock->expects($this->once())
+//            ->method('beginTransaction');
+//
+//        $this->dbConnectionMock->expects($this->once())
+//            ->method('createSavePoint')
+//            ->with('savePoint1');
+//
+//        $this->dbConnectionMock->expects($this->once())
+//            ->method('releaseSavePoint')
+//            ->with('savePoint1');
+//
+//        $transaction->begin();
+//        $transaction->begin();
+//        $transaction->submit();
+//    }
+//
+//    public function testCancel()
+//    {
+//        $transaction = new DbTransaction($this->dbConnectionMock);
+//
+//        $this->dbConnectionMock->expects($this->once())
+//            ->method('beginTransaction');
+//
+//        $this->dbConnectionMock->expects($this->once())
+//            ->method('createSavePoint')
+//            ->with('savePoint1');
+//
+//        $this->dbConnectionMock->expects($this->once())
+//            ->method('rollbackToSavePoint')
+//            ->with('savePoint1');
+//
+//        $transaction->begin();
+//        $transaction->begin();
+//        $transaction->cancel();
+//    }
 
     public function testProcessSuccessful()
     {
