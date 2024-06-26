@@ -113,19 +113,6 @@ class Db
         return $db;
     }
 
-    /**
-     * Reuses the existing instance of a transaction for the given database connection, or creates a new one if none exists.
-     *
-     * @param string|DbConnection|null $connection The database connection or its name.
-     * @return DbTransaction The transaction instance.
-     * @throws SystemException If no database connection is configured or found.
-     */
-    public static function transaction(string|DbConnection $connection = null): DbTransaction
-    {
-        $db = static::getConnectionOf($connection);
-        return self::$transactions[$db->getName()] ??= new DbTransaction($db);
-    }
-
     /** for Database ORM << **/
 
     public static function entity_connection_name(string|EntityInterface $entity): ?string

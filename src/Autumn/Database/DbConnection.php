@@ -8,6 +8,7 @@
 namespace Autumn\Database;
 
 use Autumn\Database\Interfaces\DriverInterface;
+use Autumn\Exceptions\SystemException;
 use Autumn\Interfaces\ContextInterface;
 use Autumn\Traits\ContextInterfaceTrait;
 use Autumn\Traits\HasProperties;
@@ -243,75 +244,124 @@ class DbConnection implements ContextInterface
         return $this->execute($sql, $parameters) ?? 0;
     }
 
+//    /**
+//     * @throws \Throwable
+//     */
+//    public function transactional(\Closure $callback, \Closure $fallback = null, \Closure $complete = null): mixed
+//    {
+//        try {
+//            $this->beginTransaction();
+//
+//            $result = call_user_func($callback, $this);
+//            $this->commit();
+//        } catch (\Throwable $result) {
+//            $this->rollback();
+//
+//            if ($fallback) {
+//                $result = call_user_func($fallback) ?: $result;
+//            }
+//        } finally {
+//            if ($complete) {
+//                call_user_func($complete);
+//            }
+//        }
+//
+//        if (isset($result)) {
+//            if ($result instanceof \Throwable) {
+//                throw $result;
+//            }
+//        }
+//
+//        return $result;
+//    }
+
     /**
-     * @throws \Throwable
+     * Begins a new database transaction.
      */
-    public function transactional(\Closure $callback, \Closure $fallback = null, \Closure $complete = null): mixed
-    {
-        try {
-            $this->beginTransaction();
-
-            $result = call_user_func($callback, $this);
-            $this->commit();
-        } catch (\Throwable $result) {
-            $this->rollback();
-
-            if ($fallback) {
-                $result = call_user_func($fallback) ?: $result;
-            }
-        } finally {
-            if ($complete) {
-                call_user_func($complete);
-            }
-        }
-
-        if (isset($result)) {
-            if ($result instanceof \Throwable) {
-                throw $result;
-            }
-        }
-
-        return $result;
-    }
-
     public function beginTransaction(): void
     {
         $this->getDriver()->beginTransaction();
     }
 
+    /**
+     * Commits the current database transaction.
+     */
     public function commit(): void
     {
         $this->getDriver()->commit();
     }
 
+    /**
+     * Rolls back the current database transaction.
+     */
     public function rollback(): void
     {
         $this->getDriver()->rollback();
     }
 
-    public function startCrossTransaction(string $xid): bool
+    /**
+     * Creates a new save point in the current transaction.
+     *
+     * @param string $name the name of save point.
+     * @return bool True if the save point was created successfully, false otherwise.
+     */
+    public function createSavePoint(string $name): bool
     {
-        return $this->getDriver()->startCrossTransaction($xid);
+        return $this->getDriver()->createSavePoint($name);
     }
 
-    public function endCrossTransaction(string $xid): bool
+    /**
+     * Releases the last save point in the current transaction.
+     *
+     * @param string $name the name of save point.
+     * @return bool True if the save point was released successfully, false otherwise.
+     */
+    public function releaseSavePoint(string $name): bool
     {
-        return $this->getDriver()->endCrossTransaction($xid);
+        return $this->getDriver()->releaseSavePoint($name);
     }
 
-    public function createSavePoint(string $savePoint): bool
+    /**
+     * Rolls back to the last save point in the current transaction.
+     *
+     * @param string $name the name of save point.
+     * @return bool True if rolled back to the save point successfully, false otherwise.
+     */
+    public function rollbackToSavePoint(string $name): bool
     {
-        return $this->getDriver()->createSavePoint($savePoint);
+        return $this->getDriver()->rollbackToSavePoint($name);
     }
 
-    public function releaseSavePoint(string $savePoint): bool
+    /**
+     * Executes a callback within a database transaction.
+     *
+     * @param callable $callback The callback to execute within the transaction.
+     * @param callable|null $fallback The fallback callback if the transaction fails.
+     * @param callable|null $complete The callback to execute upon transaction completion.
+     * @return mixed The result of the callback or fallback.
+     * @throws \Throwable
+     */
+    public function transaction(callable $callback, callable $fallback = null, callable $complete = null): mixed
     {
-        return $this->getDriver()->releaseSavePoint($savePoint);
-    }
+        $this->beginTransaction();
 
-    public function rollbackToSavePoint(string $savePoint): bool
-    {
-        return $this->getDriver()->rollbackToSavePoint($savePoint);
+        try {
+            $result = call_user_func($callback, $this);
+            $this->commit();
+            return $result;
+        } catch (\Throwable $ex) {
+            $this->rollback();
+
+            if (is_callable($fallback)) {
+                return call_user_func($fallback, $ex, $this);
+            }
+
+            throw $ex;
+        } finally {
+            if ($complete) {
+                call_user_func($complete, $this);
+            }
+        }
     }
 
     public function database(): string

@@ -7,12 +7,21 @@
 
 namespace App;
 
+use Autumn\Database\Db;
 use Autumn\Database\Events\EntityEventDispatcher;
 
 class Application extends \Autumn\System\Application
 {
     public static function main(string ...$args): void
     {
+        $connection = Db::of();
+
+        $connection->transaction(function() {
+            echo 'Hello world!';
+        });
+
+        exit;
+
     }
 
     protected function boot(): void
