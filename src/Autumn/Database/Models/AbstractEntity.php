@@ -1,15 +1,10 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        7/05/2024
- */
 
 namespace Autumn\Database\Models;
 
 use Autumn\Database\Attributes\Column;
+use Autumn\Database\Attributes\Index;
 use Autumn\Database\Interfaces\EntityInterface;
-use Autumn\Database\Interfaces\Persistable;
 use Autumn\System\Model;
 
 /**
@@ -19,7 +14,7 @@ use Autumn\System\Model;
  * It manages column metadata, guarded and fillable properties, and provides methods for
  * accessing and manipulating entity data.
  */
-abstract class AbstractEntity extends Model implements EntityInterface, Persistable
+abstract class AbstractEntity extends Model implements EntityInterface
 {
     public const ENTITY_NAME = null;
     public const GUARDED_COLUMNS = null;
@@ -29,6 +24,11 @@ abstract class AbstractEntity extends Model implements EntityInterface, Persista
      * @var array<string, array<string, Column>> Stores columns metadata for each entity class.
      */
     private static array $columns = [];
+
+    /**
+     * @var array<string, array<string, Column>> Stores indexes metadata for each entity class.
+     */
+    private static array $indexes = [];
 
     /**
      * @var array<string, array<string, \ReflectionProperty>> Stores reflection properties for each entity class.
@@ -104,7 +104,8 @@ abstract class AbstractEntity extends Model implements EntityInterface, Persista
             self::$columns[static::class] = [];
 
             // If parent class exists and implements EntityInterface, inherit columns
-            if (($parentClass = get_parent_class(static::class)) && is_subclass_of($parentClass, EntityInterface::class)) {
+            if (($parentClass = get_parent_class(static::class))
+                && is_subclass_of($parentClass, self::class)) {
                 self::$columns[static::class] = $parentClass::entity_columns();
             }
 
@@ -140,6 +141,35 @@ abstract class AbstractEntity extends Model implements EntityInterface, Persista
         }
 
         return self::$columns[static::class];
+    }
+
+    public static function entity_indexes(): array
+    {
+        if (!isset(self::$indexes[static::class])) {
+            self::$indexes[static::class] = [];
+
+            $reflection = new \ReflectionClass(static::class);
+
+            foreach ($reflection->getAttributes(Index::class) as $attribute) {
+                $index = $attribute->newInstance();
+                if ($index instanceof Index) {
+                    if ($name = $index->getName()) {
+                        self::$indexes[static::class][$name] = $index;
+                    } else {
+                        self::$indexes[static::class][] = $index;
+                    }
+                }
+            }
+
+            if (empty(self::$indexes[static::class])) {
+                if (($parentClass = get_parent_class(static::class))
+                    && is_subclass_of($parentClass, self::class)) {
+                    return $parentClass::entity_indexes();
+                }
+            }
+        }
+
+        return self::$indexes[static::class];
     }
 
     /**

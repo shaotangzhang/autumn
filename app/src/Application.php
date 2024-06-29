@@ -8,12 +8,22 @@
 namespace App;
 
 use App\Providers\AppServiceProvider;
-use Autumn\Database\DbServiceProvider;
+use Autumn\Database\DatabaseServiceProvider;
+use Autumn\System\Response;
+use Autumn\System\Responses\ResponseService;
+use Autumn\System\Session;
 
 class Application extends \Autumn\System\Application
 {
     protected array $serviceProviders = [
-        DbServiceProvider::class,   // This can be a must if ORM is used
+        DatabaseServiceProvider::class,   // This can be a must if ORM is used
         AppServiceProvider::class,
     ];
+
+    public function exceptionHandler(\Throwable $exception): void
+     {
+         $response = ResponseService::context()->respond($exception);
+         Response::fromResponseInterface($response)->send();
+         exit;
+     }
 }

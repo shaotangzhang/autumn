@@ -30,7 +30,7 @@ class Event implements EventInterface
      * @param object|null $sender The object that triggered the event, or null if not specified.
      * @param mixed ...$args Additional arguments to pass with the event.
      */
-    public static function fire(string $event, object $sender = null, mixed ...$args): void
+    public static function broadcast(string $event, object $sender = null, mixed ...$args): void
     {
         $object = new static($event, $sender, $args);
         static::dispatcher()->dispatch($object);

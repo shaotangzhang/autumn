@@ -2,9 +2,12 @@
 
 namespace Autumn\System;
 
+use Autumn\Exceptions\ForbiddenException;
 use Autumn\Http\Message\ResponseTrait;
 use Autumn\Interfaces\ArrayInterface;
 use Autumn\Interfaces\Renderable;
+use Autumn\System\Responses\Handlers\ThrowableResponseHandler;
+use Autumn\System\Responses\RedirectResponse;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -44,6 +47,21 @@ class Response implements ResponseInterface
         $this->setReasonPhrase($reasonPhrase ?? static::DEFAULT_REASON_PHRASE);
         $this->setProtocol(static::DEFAULT_PROTOCOL);
         $this->setProtocolVersion($protocolVersion ?? static::DEFAULT_PROTOCOL_VERSION);
+    }
+
+    public static function redirect(string $location, array $args = null, int $statusCode = 302, string $reasonPhrase = null): RedirectResponse
+    {
+        if ($args) {
+            $location .= '?' . http_build_query($args);
+        }
+
+        return new RedirectResponse($location, $statusCode, $reasonPhrase);
+    }
+
+    public static function forbidden(string $message, int $statusCode = 403): ResponseInterface
+    {
+        return ThrowableResponseHandler::context()
+            ->respond(new ForbiddenException($message, $statusCode));
     }
 
     /**
@@ -180,6 +198,11 @@ class Response implements ResponseInterface
 
         if ($content instanceof \SimpleXMLElement || $content instanceof \DOMDocument) {
             echo $content->saveXML();
+            return;
+        }
+
+        if($content instanceof ResponseInterface) {
+            static::fromResponseInterface($content)->send();
             return;
         }
 

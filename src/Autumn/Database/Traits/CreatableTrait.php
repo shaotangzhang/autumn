@@ -1,10 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        7/05/2024
- */
-
 namespace Autumn\Database\Traits;
 
 use Autumn\Database\Attributes\Column;

@@ -3,6 +3,7 @@
 namespace Autumn\System;
 
 use Autumn\App;
+use Autumn\Database\Migration\Migration;
 use Autumn\Interfaces\ContextInterface;
 use Autumn\System\ServiceContainer\ServiceContainerInterface;
 use Autumn\System\ServiceContainer\ServiceProviderInterface;
@@ -160,9 +161,14 @@ abstract class Extension implements ContextInterface, ServiceProviderInterface
      *
      * @return Route|null The loaded Route object, or null if no routes were loaded.
      */
-    public static function routes(string $prefix, array $options = null): ?Route
+    public static function routes(string $prefix = '', array $options = null): ?Route
     {
-        if ($appName = strtolower(App::name())) {
+        return static::mount(null, $prefix, $options);
+    }
+
+    public static function mount(string $appName = null, string $prefix = '', array $options = null): ?Route
+    {
+        if ($appName = strtolower($appName ?? App::name())) {
             $routes = "routes-$appName.php";
         } else {
             $routes = 'routes.php';
@@ -173,5 +179,10 @@ abstract class Extension implements ContextInterface, ServiceProviderInterface
         }
 
         return null;
+    }
+
+    public static function migrate(): void
+    {
+        Migration::context()->registerEntity(...static::REGISTERED_ENTITIES);
     }
 }

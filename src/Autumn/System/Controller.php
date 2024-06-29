@@ -2,9 +2,11 @@
 
 namespace Autumn\System;
 
+use Autumn\Exceptions\RedirectException;
 use Autumn\I18n\Translation;
 use Autumn\Interfaces\ArrayInterface;
 use Autumn\Interfaces\ContextInterface;
+use Autumn\System\Responses\RedirectResponse;
 use Autumn\Traits\ArrayPropertiesTrait;
 use Autumn\Traits\ContextInterfaceTrait;
 
@@ -52,5 +54,10 @@ class Controller implements ContextInterface, ArrayInterface
         $view = new View($view, $args, $context);
         $view->setTranslation($this->translation);
         return $view;
+    }
+
+    protected function redirect(string $location, int $statusCode = null, string $reasonPhrase = null): RedirectResponse
+    {
+        return new RedirectResponse($location, $statusCode, $reasonPhrase);
     }
 }

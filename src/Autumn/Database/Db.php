@@ -20,6 +20,7 @@ class Db
     public const DEFAULT_DRIVER = 'pdo';
     public const PARAMETER_PREFIX = 'P_';
     public const LIMIT_MAX = 5000;
+    public const LIMIT_DEFAULT = 0;
     public const TIMESTAMP_PARAM_FORMAT = 'Y-m-d H:i:s';
 
     public const FETCH_META = 1;
@@ -162,12 +163,11 @@ class Db
      * Retrieves the primary key column name of the entity by calling the entity's `column_primary_key` method.
      *
      * @param string|AbstractEntity $entity The entity class name or instance.
-     * @return string The primary key column name.
-     * @throws ValidationException If the entity class is not a subclass of `AbstractEntity`.
+     * @return string|array The primary key column name or names.
      */
-    public static function entity_primary_key(string|AbstractEntity $entity): string
+    public static function entity_primary_key(string|AbstractEntity $entity): string|array
     {
-        if (!is_subclass_of($entity, AbstractEntity::class)) {
+        if (is_string($entity) && !is_subclass_of($entity, AbstractEntity::class)) {
             throw ValidationException::of("Invalid entity class provided.");
         }
 

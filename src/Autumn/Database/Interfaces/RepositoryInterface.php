@@ -270,16 +270,16 @@ interface RepositoryInterface extends \IteratorAggregate
 
     public function callback(string|callable $callback = null, int $mode = null): static;
 
-    /**
-     * Create an inner join with a related entity through a specified relation class.
-     *
-     * @param string|RelationInterface $relationClass The relation class or its name.
-     * @param string $relationAlias Alias for the related entity table in the SQL query (default: 'R').
-     * @param string|Stringable ...$columns Optional columns to select from the related entity.
-     * @return RepositoryInterface The repository instance with the inner join applied.
-     * @throws ValidationException If the provided relation class is invalid or not a subclass of RelationInterface,
-     *                            or if the current entity is not connected with the specified relation class.
-     */
-    public function through(string|RelationInterface $relationClass, string $relationAlias = 'R', string|Stringable ...$columns): RepositoryInterface;
+//    /**
+//     * Create an inner join with a related entity through a specified relation class.
+//     *
+//     * @param string|RelationInterface $relationClass The relation class or its name.
+//     * @param string $relationAlias Alias for the related entity table in the SQL query (default: 'R').
+//     * @param string|Stringable ...$columns Optional columns to select from the related entity.
+//     * @return RepositoryInterface The repository instance with the inner join applied.
+//     * @throws ValidationException If the provided relation class is invalid or not a subclass of RelationInterface,
+//     *                            or if the current entity is not connected with the specified relation class.
+//     */
+//    public function through(string|RelationInterface $relationClass, string $relationAlias = 'R', string|Stringable ...$columns): RepositoryInterface;
 
 }

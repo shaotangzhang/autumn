@@ -23,7 +23,7 @@ trait ExceptionalTrait
         );
     }
 
-    public static function of(string|array $message, mixed ...$args): static
+    public static function of(string|array|null $message, mixed ...$args): static
     {
         if (is_string($message)) {
             $message = ['message' => $message];

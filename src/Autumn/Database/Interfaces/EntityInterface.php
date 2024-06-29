@@ -7,7 +7,9 @@
 
 namespace Autumn\Database\Interfaces;
 
-interface EntityInterface
+use Autumn\Interfaces\ModelInterface;
+
+interface EntityInterface extends ModelInterface
 {
     public static function entity_name(): string;
 }

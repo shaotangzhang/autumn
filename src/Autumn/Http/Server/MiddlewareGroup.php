@@ -84,7 +84,7 @@ class MiddlewareGroup implements RequestHandlerInterface
      */
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        reset($this->middlewares);
+        // reset($this->middlewares);
         return $this->processNext($request);
     }
 

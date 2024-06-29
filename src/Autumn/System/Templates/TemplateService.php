@@ -336,7 +336,7 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
     public function outputView(View $view, array $context = null): void
     {
         $file = $this->getTemplateFile($view->getName());
-        if (realpath($file)) {
+        if ($file && realpath($file)) {
 
             $origin = Translation::global($view->getTranslation());
 
@@ -353,12 +353,16 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
                     return include func_get_arg(0);
                 })->call($view, $file);
 
-                if ($context['use_layout'] ?? $view->can('use_layout')) {
-                    unset($context['use_layout']);
-                    $callback = $this->compileLayout($view, $callback, $context) ?: $callback;
+                if (is_callable($callback)) {
+                    if ($context['use_layout'] ?? $view->can('use_layout')) {
+                        unset($context['use_layout']);
+                        $callback = $this->compileLayout($view, $callback, $context) ?: $callback;
+                    }
                 }
 
-                $this->output($callback, $args, $context);
+                if (($callback !== null) && ($callback !== 1) && ($callback !== false)) {
+                    $this->output($callback, $args, $context);
+                }
 
             } finally {
                 Translation::global($origin);

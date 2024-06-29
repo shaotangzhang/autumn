@@ -89,22 +89,22 @@ if (!function_exists('call')) {
     }
 }
 
-if (!function_exists('fire')) {
+if (!function_exists('broadcast')) {
     /**
-     * Fire an event with the given arguments.
+     * Broadcast an event with the given arguments.
      *
-     * @param string $event The name of the event to fire.
+     * @param string $event The name of the event to broadcast.
      * @param object|array|null $sender The event sender or an array of arguments.
      * @param array|null $args Additional arguments to pass to the event handlers.
-     * @return bool True if the event was handled successfully, false otherwise.
+     * @return void
      */
-    function fire(string $event, object|array $sender = null, array $args = null): bool
+    function broadcast(string $event, object|array $sender = null, array $args = null): void
     {
         if (is_array($sender)) {
-            return Event::fire($event, null, array_merge($sender, $args ?? []));
+            Event::broadcast($event, null, array_merge($sender, $args ?? []));
+        } else {
+            Event::broadcast($event, $sender, $args);
         }
-
-        return Event::fire($event, $sender, $args);
     }
 }
 

@@ -1,10 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        19/05/2024
- */
-
 namespace Autumn\Database\Models;
 
 use Autumn\Lang\StringBuilder;

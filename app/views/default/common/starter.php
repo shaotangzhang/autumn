@@ -25,7 +25,7 @@
 
 <?php $this->slot('sidebar'); ?>
 
-<main>
+<main class="w-100">
     <?php
     $this->slot('before');
     ?>

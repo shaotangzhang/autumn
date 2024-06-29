@@ -78,7 +78,7 @@ class Application implements RequestHandlerInterface
 
     protected array $serviceProviders = [];
 
-    public \Closure $bootOnce;
+    private static \Closure|false|null $bootOnce = null;
 
     /**
      * Application constructor.
@@ -99,15 +99,18 @@ class Application implements RequestHandlerInterface
         $reflection = new \ReflectionObject($this);
         $this->root = dirname($reflection->getFileName(), 2);
 
+        // load default configurations
         $this->loadConfig();
+
+        // load the extensions
         $this->configExtensions();
-//        $this->configLogger();
-//        $this->configImplements();
-//        $this->configMiddlewares();
+
+        // load route settings
         $this->configRoutes();
 
-        $this->bootOnce = function () {
-            unset($this->bootOnce);
+        self::$bootOnce ??= function () {
+            // muted the booting process
+            self::$bootOnce = false;
 
             $this->serviceProviders = array_unique($this->serviceProviders);
 
@@ -135,6 +138,18 @@ class Application implements RequestHandlerInterface
     public static function main(string ...$args): void
     {
         // Implement the entry point logic here
+    }
+
+    public final static function boot(ClassLoader $classLoader): static
+    {
+        self::$instance ??= new static($classLoader);
+
+        if (self::$bootOnce) {
+            call_user_func(self::$bootOnce);
+            self::$bootOnce = false;
+        }
+
+        return self::$instance;
     }
 
     /**
@@ -168,44 +183,6 @@ class Application implements RequestHandlerInterface
     }
 
     /**
-     * Configures middlewares from the configuration file.
-     *
-     * @return void
-     */
-    protected function configMiddlewares(): void
-    {
-        if (realpath($file = $this->path('config', 'middlewares.php'))) {
-            $middlewares = include_once $file;
-            if (is_iterable($middlewares)) {
-                foreach ($middlewares as $group => $middleware) {
-                    if (is_array($middleware)) {
-                        $this->addToMiddlewareGroup($group, ...$middleware);
-                    } elseif (is_subclass_of($middleware, MiddlewareInterface::class)) {
-                        $this->applyMiddleware($middleware);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Configures implementations from the configuration file.
-     *
-     * @return void
-     */
-    protected function configImplements(): void
-    {
-        if (realpath($file = $this->path('config', 'implements.php'))) {
-            $services = include_once $file;
-            if (is_iterable($services)) {
-                foreach ($services as $abstract => $concrete) {
-                    $this->serviceContainer->bind($abstract, $concrete);
-                }
-            }
-        }
-    }
-
-    /**
      * Configures extensions from the configuration file.
      *
      * @return void
@@ -222,6 +199,10 @@ class Application implements RequestHandlerInterface
                         } else {
                             $name = $extension;
                         }
+                    }
+
+                    if (!is_subclass_of($extension, Extension::class)) {
+                        $extension = $this->getDefaultExtensionClass($name);
                     }
 
                     $this->registerExtension($name, $extension);
@@ -341,19 +322,21 @@ class Application implements RequestHandlerInterface
      * @param string $class Class name.
      * @param string|null $relativePath Relative path to the class file.
      * @return string
-     * @throws \RuntimeException if the class cannot be reflected.
+     * @throws \ReflectionException if the class cannot be reflected.
      */
     public function registerNamespace(string $class, string $relativePath = null): string
     {
-        try {
-            $reflection = new \ReflectionClass($class);
-            $namespace = $reflection->getNamespaceName();
-            $filePath = realpath(dirname($class) . DIRECTORY_SEPARATOR . $relativePath);
-            $this->classLoader->addPsr4($namespace . '\\', $filePath);
-            return $filePath;
-        } catch (\ReflectionException $ex) {
-            throw new \RuntimeException($ex->getMessage(), $ex->getCode(), $ex);
+        $reflection = new \ReflectionClass($class);
+        $namespace = $reflection->getNamespaceName();
+        $filePath = dirname($reflection->getFileName());
+        if ($relativePath) {
+            $filePath .= DIRECTORY_SEPARATOR . $relativePath;
         }
+        if ($realpath = realpath($filePath)) {
+            $this->classLoader->addPsr4($namespace . '\\', $realpath);
+            return $realpath;
+        }
+        throw new \ReflectionException('Extension path `' . $filePath . '` is not found.');
     }
 
     /**
@@ -378,7 +361,7 @@ class Application implements RequestHandlerInterface
         }
 
         $this->registeredExtensions[$name] = $extension;
-        $this->registerNamespace($extension, '..');
+        $this->registerNamespace($extension);
     }
 
     /**
@@ -404,7 +387,7 @@ class Application implements RequestHandlerInterface
      */
     public function process(ServerRequestInterface $request): ResponseInterface
     {
-        return $this->middlewareHandler->handle($request);
+        return Route::guarded($request, $this->middlewareHandler);
     }
 
     /**
@@ -505,5 +488,27 @@ class Application implements RequestHandlerInterface
     public function getDefaultLang(): string
     {
         return env('SITE_LANG', 'en');
+    }
+
+    public function getDefaultExtensionClass(string $name): string
+    {
+        static $cache;
+
+        if (isset($this->registeredExtensions[$name])) {
+            return $this->registeredExtensions[$name];
+        }
+
+        if (isset($cache[$name])) {
+            return $cache[$name];
+        }
+
+        if (realpath($file = DOC_ROOT . '/src/extensions/' . $name . '/src/extension.php')) {
+            $extension = include_once $file;
+            if (is_string($extension)) {
+                return $cache[$name] = $extension;
+            }
+        }
+
+        return '';
     }
 }

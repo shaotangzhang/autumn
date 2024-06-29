@@ -9,9 +9,5 @@ namespace Autumn\Database\Interfaces;
 
 interface RelationInterface extends Extendable
 {
-    public static function relation_secondary_class(): string;
-
-    public static function relation_secondary_column(): string;
-
-    public function getSecondaryId(): int;
+    public static function relation_secondary_class(): ?string;
 }

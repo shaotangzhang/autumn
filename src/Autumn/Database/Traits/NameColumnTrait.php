@@ -1,9 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        7/05/2024
- */
 
 namespace Autumn\Database\Traits;
 
@@ -12,7 +7,6 @@ use Autumn\Database\Attributes\Index;
 
 trait NameColumnTrait
 {
-    #[Index(Index::DEFAULT_UNIQUE_NAME, Index::DEFAULT_UNIQUE_NAME)]
     #[Column(type: Column::TYPE_STRING, name: 'name', size: 100, charset: Column::CHARSET_ASCII)]
     private string $name = '';
 

@@ -1,10 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        8/05/2024
- */
-
 namespace Autumn\Database\Traits;
 
 use Autumn\Database\Attributes\Column;
@@ -14,7 +8,7 @@ trait PersistableTrait
     #[Column(type: Column::ID, name: self::COLUMN_PRIMARY_KEY, auto: true, priority: Column::PRIORITY_PK)]
     private int $id = 0;
 
-    public static function column_primary_key(): string
+    public static function column_primary_key(): string|array
     {
         return static::COLUMN_PRIMARY_KEY;
     }
@@ -35,5 +29,10 @@ trait PersistableTrait
     public function isNew(): bool
     {
         return $this->id <= 0;
+    }
+
+    public function pk(): int|array
+    {
+        return $this->id;
     }
 }

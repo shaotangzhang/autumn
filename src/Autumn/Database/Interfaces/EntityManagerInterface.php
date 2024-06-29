@@ -13,7 +13,9 @@ interface EntityManagerInterface extends EntityInterface
 {
     public static function find(int|array $context): ?static;
 
-    public static function findOrFail(int|array $context, string $messageIfNotFound=null): static;
+    public static function findBy(int|array $context): RepositoryInterface;
+
+    public static function findOrFail(int|array $context, string $messageIfNotFound = null): static;
 
     public static function findOrNew(int|array $context, array $extra = null): static;
 
@@ -26,8 +28,4 @@ interface EntityManagerInterface extends EntityInterface
     public static function update(int|self $entity, array $changes = null): static;
 
     public static function delete(int|self $entity): static;
-
-    public function save(array $changes = null): bool;
-
-    public function destroy(): bool;
 }

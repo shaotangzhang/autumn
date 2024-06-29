@@ -1,22 +1,18 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        7/05/2024
- */
 
 namespace Autumn\Database\Models;
 
 use Autumn\Database\Interfaces\RelationInterface;
-use Autumn\Database\Traits\RelationTrait;
 
 /**
  * Abstract class representing a many-to-many relation entity.
  * This class is meant to be extended by concrete relation classes.
  */
-abstract class Relation extends AbstractEntity implements RelationInterface
+abstract class Relation extends ExtendedEntity implements RelationInterface
 {
-    use RelationTrait;
+    public const ONE_TO_ONE = 'ONE_TO_ONE';
+    public const ONE_TO_MANY = 'ONE_TO_MANY';
+    public const MANY_TO_MANY = 'MANY_TO_MANY';
 
     /**
      * The class name of the primary entity in the relation.
@@ -41,60 +37,22 @@ abstract class Relation extends AbstractEntity implements RelationInterface
     /**
      * Whether to ignore duplicate entries on creation.
      */
-    public const IGNORE_DUPLICATE_ON_CREATE = false;
+    public const IGNORE_DUPLICATE_ON_CREATE = true;
 
-    /**
-     * Returns the primary key columns for the relation table.
-     *
-     * @return string|array
-     */
-    public static function column_primary_key(): string|array
+    public static function relation_secondary_class(): ?string
     {
-        return [static::RELATION_PRIMARY_COLUMN, static::RELATION_SECONDARY_COLUMN];
+        return static::RELATION_SECONDARY_CLASS;
     }
 
-    /**
-     * Gets the ID of the relation.
-     * Since relations don't have a single ID, this always returns 0.
-     *
-     * @return int
-     */
-    public function getId(): int
+    public static function relationship(): string
     {
-        return 0;
+        if (static::relation_secondary_column()) {
+            if (static::relation_secondary_class()) {
+                return static::MANY_TO_MANY;
+            }
+            return static::ONE_TO_MANY;
+        }
+        return static::ONE_TO_ONE;
     }
 
-    /**
-     * Sets the ID of the relation.
-     * This method does nothing because relations don't have a single ID.
-     *
-     * @param int $id
-     */
-    public function setId(int $id): void
-    {
-        // do nothing
-    }
-
-    /**
-     * Checks if the relation is new (not yet saved in the database).
-     *
-     * @return bool
-     */
-    public function isNew(): bool
-    {
-        return !$this->getPrimaryId() && !$this->getSecondaryId();
-    }
-
-    /**
-     * Returns the primary key values for the relation.
-     *
-     * @return int|array
-     */
-    public function pk(): int|array
-    {
-        return [
-            static::RELATION_PRIMARY_COLUMN => $this->getPrimaryId(),
-            static::RELATION_SECONDARY_COLUMN => $this->getSecondaryId()
-        ];
-    }
 }

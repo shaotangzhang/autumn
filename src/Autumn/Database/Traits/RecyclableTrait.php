@@ -1,9 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        7/05/2024
- */
 
 namespace Autumn\Database\Traits;
 
@@ -13,7 +8,6 @@ use Autumn\Lang\Date;
 
 trait RecyclableTrait
 {
-    #[Index(Index::DEFAULT_INDEX_NAME)]
     #[Column(type: Column::TYPE_TIMESTAMP, name: self::COLUMN_DELETED_AT, priority: Column::PRIORITY_SOFT_DELETION)]
     private ?\DateTimeInterface $deletedAt = null;
 

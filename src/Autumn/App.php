@@ -2,11 +2,7 @@
 
 namespace Autumn;
 
-use Autumn\Database\Db;
-use Autumn\Database\Events\EntityEventDispatcher;
-use Autumn\Events\Event;
 use Autumn\System\Application;
-use Autumn\System\Events\AppBootEvent;
 use Composer\Autoload\ClassLoader;
 
 defined('DOC_ROOT') or define('DOC_ROOT', dirname(__DIR__, 2));
@@ -67,12 +63,9 @@ final class App
         $classLoader->addPsr4(ucfirst($appName) . '\\', dirname($file));
 
         new self($appName);
-
         $class::main(...$_SERVER['argv'] ?? []);
-        self::$application = new $class($classLoader);
-        $bootOnce = self::$application->bootOnce;
-        $bootOnce();
-        return self::$application;
+
+        return self::$application = $class::boot($classLoader);
     }
 
     public static function name(): string
@@ -89,5 +82,36 @@ final class App
     public static function realpath(string ...$args): string
     {
         return realpath(self::map(...$args));
+    }
+
+    public static function path(string ...$args): string
+    {
+        return self::context()->path(...$args);
+    }
+
+    public static function callable(string $class, string $method, array $args = null, bool $autoBind = false): callable
+    {
+        static $container;
+
+        return function () use ($args, $autoBind, $class, $method, &$container) {
+            if ($container ??= self::$application?->getServiceContainer()) {
+
+                if ($autoBind && !$container->isBound($class)) {
+                    $container->bind($class, $class);
+                }
+
+                if ($instance = $container->make($class)) {
+                    if ($args) {
+                        $args = array_merge(func_get_args(), $args);
+                    } else {
+                        $args = func_get_args();
+                    }
+
+                    return call_user_func_array([$instance, $method], $args);
+                }
+            }
+
+            return null;
+        };
     }
 }

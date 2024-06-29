@@ -1,9 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        7/05/2024
- */
 
 namespace Autumn\Database\Interfaces;
 
@@ -13,5 +8,6 @@ interface Extendable
 
     public static function relation_primary_column(): string;
 
-    public function getPrimaryId(): int;
+    public static function relation_secondary_column(): ?string;
+
 }

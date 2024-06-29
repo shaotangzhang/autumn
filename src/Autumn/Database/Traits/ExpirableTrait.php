@@ -1,19 +1,11 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        7/05/2024
- */
-
 namespace Autumn\Database\Traits;
 
 use Autumn\Database\Attributes\Column;
-use Autumn\Database\Attributes\Index;
 use Autumn\Lang\Date;
 
 trait ExpirableTrait
 {
-    #[Index(Index::DEFAULT_INDEX_NAME)]
     #[Column(type: Column::TYPE_TIMESTAMP, name: 'expired_at', priority: Column::PRIORITY_TIMESTAMPS)]
     private ?\DateTimeInterface $expiredAt = null;
 

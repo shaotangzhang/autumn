@@ -35,6 +35,7 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
         'word' => '\w+',       // 匹配单词字符（字母、数字、下划线）
         'alpha' => '[a-zA-Z]+', // 匹配至少一个字母（大小写）
     ];
+    private static array $guards = [];
 
     private string $modifiers = '';
 
@@ -76,6 +77,20 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
         return $name;
     }
 
+    public static function guarded(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+    {
+        $group = new MiddlewareGroup($handler);
+
+        $target = $request->getUri()->getPath();
+        foreach (static::$guards as $path => $middlewares) {
+            if (static::comparePath($path, $target) !== null) {
+                $group->addMiddleware(...$middlewares);
+            }
+        }
+
+        return $group->handle($request);
+    }
+
     public function withVariables(array $variables): static
     {
         if ($this->variables === $variables) {
@@ -115,6 +130,40 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
         return "#^$pattern$#" . $modifiers;
     }
 
+    public static function when(string $path, string|ServerRequestInterface $target, callable $callback): mixed
+    {
+        if ($target instanceof ServerRequestInterface) {
+            $request = $target;
+            $target = $request->getUri()->getPath();
+        }
+
+        $matches = static::comparePath($path, $target);
+        if ($matches !== null) {
+            if ($request ??= null) {
+                $request = Request::fromServerRequest($request, $matches);
+                return call_user_func($callback, $request);
+            } else {
+                return call($callback, $matches);
+            }
+        }
+        return null;
+    }
+
+    public static function comparePath(string $path, string $target): ?array
+    {
+        $pattern = static::parsePattern($path);
+        return static::comparePattern($target, $pattern);
+    }
+
+    public static function comparePattern(string $target, string $pattern): ?array
+    {
+        if (preg_match($pattern, $target, $matches)) {
+            return array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
+        }
+
+        return null;
+    }
+
     /**
      * Generates a regex pattern for a given route placeholder.
      *
@@ -142,7 +191,7 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
      *                             If null, the placeholder will be removed from the list of patterns.
      * @return void
      */
-    public static function when(string $placeholder, string $pattern = null): void
+    public static function replacement(string $placeholder, string $pattern = null): void
     {
         if ($pattern !== null) {
             self::$placeholders[$placeholder] = $pattern;
@@ -159,6 +208,12 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
     public static function create(string $path, string|callable $handler, array $options = null): static
     {
         return new static($path, $handler, $options);
+    }
+
+    public static function guards(string $path, string|MiddlewareInterface ...$middlewares): void
+    {
+        static::$guards[$path] ??= [];
+        array_push(static::$guards[$path], ...$middlewares);
     }
 
     public static function addRule(string|array $methods, string $path, string|callable $handler, array $options = null): static
@@ -323,6 +378,14 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
         return $this->group;
     }
 
+    /**
+     * @param Route|null $group
+     */
+    public function setGroup(?Route $group): void
+    {
+        $this->group = $group;
+    }
+
     public function buildUrl(array $args = null): string
     {
         $url = preg_replace_callback('/{(\w+)}/', function (array $matches) use (&$args) {
@@ -392,15 +455,6 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
         return $this->handler;
     }
 
-    public function compare(string $target, string $pattern): ?array
-    {
-        if (preg_match($pattern, $target, $matches)) {
-            return array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
-        }
-
-        return null;
-    }
-
     public function getPattern(): string
     {
         return static::parsePattern($this->group?->getPath() . $this->getPath(), $this->getModifiers());
@@ -415,7 +469,7 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
     {
         $pattern = static::parsePattern($this->group?->getPath() . $this->getPath(), $this->getModifiers());
         if ($pattern) {
-            $variables = $this->compare($target, $pattern);
+            $variables = static::comparePattern($target, $pattern);
             if ($variables !== null) {
                 if ($variables !== $this->variables) {
                     $clone = clone $this;
@@ -427,6 +481,26 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
             }
         }
         return null;
+    }
+
+    public function guard(ServerRequestInterface $request): ResponseInterface
+    {
+        $target = $request->getUri()->getPath();
+
+        foreach (static::$guards as $path => $middlewares) {
+            $matches = static::comparePath($path, $target);
+            if ($matches !== null) {
+                if ($matches) {
+                    $request = Request::fromServerRequest($request, $matches);
+                }
+
+                $group = new MiddlewareGroup($this);
+                $group->addMiddleware(...$middlewares);
+                return $group->handle($request);
+            }
+        }
+
+        return $this->handle($request);
     }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
@@ -511,5 +585,10 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
         }
 
         return null;
+    }
+
+    public function whenElse(RequestHandlerInterface $handler): ResponseInterface
+    {
+        return $handler->handle($this->request ?? Request::capture());
     }
 }

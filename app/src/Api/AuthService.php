@@ -1,24 +1,18 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        24/06/2024
- */
-
 namespace App\Api;
 
-use App\Models\User\User;
-use App\Models\User\UserIp;
-use App\Models\User\UserSession;
+use App\Models\Developer\Developer;
+use App\Models\Developer\DeveloperIp;
+use App\Models\Developer\DeveloperSession;
 use Autumn\System\Service;
 
 class AuthService extends Service
 {
-    public function login(string $username, string $password): ?User
+    public function login(string $username, string $password): ?Developer
     {
         $field = str_contains($username, '@') ? 'email' : 'username';
 
-        $user = User::find([$field => $username, 'status' => 'active']);
+        $user = Developer::find([$field => $username, 'status' => 'active']);
         if (!$user || !password_verify($password, $user->getPassword())) {
             return null;
         }
@@ -29,19 +23,19 @@ class AuthService extends Service
     public function getAcceptableIpList(int $id): array
     {
         $list = [];
-        foreach (UserIp::find(['user_id' => $id]) as $item) {
+        foreach (DeveloperIp::find(['user_id' => $id]) as $item) {
             $list[] = $item['ip'];
         }
         return $list;
     }
 
-    public function createSession(User $user, string $remoteIP, \DateTimeImmutable &$expires = null): string
+    public function createSession(Developer $user, string $remoteIP, \DateTimeImmutable &$expires = null): string
     {
         $expires ??= new \DateTimeImmutable('+7 days');
-        UserSession::create([
+        DeveloperSession::create([
             'user_id' => $user->getId(),
-            'session_id' => $token = md5(serialize([$user->getId(), $remoteIP, $expires])),
-            'expires' => $expires
+            'sid' => $token = md5(serialize([$user->getId(), $remoteIP, $expires])),
+            'expired_at' => $expires
         ]);
 
         return $token;

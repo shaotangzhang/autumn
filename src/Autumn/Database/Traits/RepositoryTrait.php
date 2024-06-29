@@ -1,9 +1,4 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        8/05/2024
- */
 
 namespace Autumn\Database\Traits;
 
@@ -12,17 +7,26 @@ use Autumn\Database\Db;
 use Autumn\Database\DbConnection;
 use Autumn\Database\DbResultSet;
 use Autumn\Database\Interfaces\EntityInterface;
-use Autumn\Database\Interfaces\RelationInterface;
-use Autumn\Database\Interfaces\RepositoryInterface;
+use Autumn\Database\Interfaces\EntityManagerInterface;
 use Autumn\Exceptions\SystemException;
 use Autumn\Exceptions\ValidationException;
-use Stringable;
 use Traversable;
 
 trait RepositoryTrait
 {
+    use RepositoryContextPreparationTrait;
+
     #[Transient]
-    private string $modelClass = '';
+    private readonly string $modelClass;
+
+    #[Transient]
+    private ?DbConnection $connection;
+
+    #[Transient]
+    private bool $readOnly = false;
+
+    #[Transient]
+    private array $context;
 
     #[Transient]
     private ?string $modelTable = null;
@@ -52,48 +56,52 @@ trait RepositoryTrait
     private ?int $mode = null;
 
     #[Transient]
-    private ?DbConnection $connection = null;
-
-    #[Transient]
     private ?DbResultSet $resultSet = null;
 
-    private array $context = [];
+    #[Transient]
+    private string|array|null $modelPrimaryKey = null;
 
-    public function __construct(string|EntityInterface $entity, array $context = null, DbConnection $connection = null)
+    #[Transient]
+    private ?array $modelPrimaryKeys = null;
+
+    /**
+     * Creates a repository instance for the specified model class and optional context and database connection.
+     *
+     * @param string $modelClass The class name of the entity model.
+     * @param array|null $context Optional. Context array containing settings and criteria.
+     * @param DbConnection|null $connection Optional. Database connection instance.
+     * @return static A new instance of the repository configured with the provided parameters.
+     * @throws ValidationException If the provided model class does not implement EntityInterface.
+     */
+    public static function of(string $modelClass, array $context = null, DbConnection $connection = null): static
     {
-        $entityClass = is_string($entity) ? $entity : $entity::class;
-        if (!is_subclass_of($entityClass, EntityInterface::class)) {
-            throw ValidationException::of('Invalid entity: `%s`', $entityClass);
+        if (!is_subclass_of($modelClass, EntityInterface::class)) {
+            throw ValidationException::of('Invalid entity: %s', $modelClass);
         }
 
-        $this->connection = $connection;
-        $this->modelClass = $entityClass;
+        if (is_subclass_of($modelClass, EntityManagerInterface::class)) {
+            return $modelClass::repository($context, $connection);
+        }
 
+        $instance = new static;
+
+        $instance->modelClass = $modelClass;
+        $instance->connection = $connection;
+        $instance->readOnly = $connection === null;
+
+        $instance->reset();
         if ($context) {
-            $this->prepareFromContext($context);
+            $instance->__prepare_from_context__($context);
         }
+
+        return $instance;
     }
 
     /**
-     * @return array
+     * Resets the query builder to its initial state.
+     *
+     * @return static The repository instance after resetting the query builder.
      */
-    public function getContext(): array
-    {
-        return $this->context;
-    }
-
-    public function prepareFromContext(array $context): static
-    {
-        if ($value = (string)($context['alias'] ?? null)) {
-            $this->primaryTableAlias = $value;
-        }
-
-        // do more
-
-        $this->context = $context;
-        return $this;
-    }
-
     public function reset(): static
     {
         $this->query = [];
@@ -102,31 +110,173 @@ trait RepositoryTrait
         $this->manipulate = 'SELECT';
         $this->primaryTableAlias = '';
         $this->resultSet = null;
-
         return $this;
     }
 
     /**
-     * @return string
+     * Retrieves the current parameters set for the query.
+     *
+     * @return array The array of parameters set for the query.
      */
-    public function getModelClass(): string
+    public function parameters(): array
     {
-        return $this->modelClass;
+        return $this->parameters;
     }
 
-    public function getModelTable(): string
+    /**
+     * Executes the built query and returns the result set.
+     *
+     * @return DbResultSet The result set obtained from executing the query.
+     * @throws SystemException If no database connection is configured.
+     */
+    public function query(): DbResultSet
     {
-        return $this->modelTable ??= Db::entity_name($this->getModelClass());
+        if (!$db = $this->__connection__()) {
+            throw SystemException::of(
+                'No connection is configured for the entity %s.',
+                $this->__model_class__()
+            );
+        }
+
+        $this->resultSet = null;
+
+        $parametersBeforeQuery = $this->parameters;
+
+        $sql = [
+            ...$this->__build_select__(),
+            ...$this->__build_from__(),
+            ...$this->__build_joins__(),
+            ...$this->__build_where__(),
+            ...$this->__build_group_by__(),
+            ...$this->__build_order_by__(),
+            ...$this->__build_limit_offset__(),
+        ];
+
+        $result = $this->resultSet = $db
+            ->query(implode(' ', $sql), $this->parameters)
+            ->mode($this->mode ?? Db::FETCH_DATA)
+            ->callback($this->callback ?? $this->__model_class__())
+            ->alias($this->primaryTableAlias ?: $this->__model_table__())
+            ->cache($this->toCacheResultSet);
+
+        $this->parameters = $parametersBeforeQuery;
+        return $result;
     }
 
-    public function getLimitMax(): int
+    /**
+     * Executes an aggregate function (e.g., COUNT, SUM) on the specified columns.
+     *
+     * @param string $command The aggregate function command (e.g., 'COUNT', 'SUM').
+     * @param string|\Stringable ...$columns The columns to perform the aggregate function on.
+     * @return static A clone of the repository instance with the aggregate function applied.
+     */
+    public function aggregate(string $command, string|\Stringable ...$columns): static
     {
-        return $this->context['limit_default'] ?? env('QUERY_LIMIT_MAX') ?? Db::LIMIT_MAX;
+        $column = implode($columns) ?: '*';
+
+        $clone = clone $this;
+        $clone->query['select'] = "$command($column)";
+        return $clone;
+    }
+
+    public function count(string|\Stringable $column = null, bool $distinct = null): int
+    {
+        $column = ($distinct ? 'DISTINCT ' : '') . ($column ?: '*');
+        $clone = $this->aggregate('COUNT', $column);
+        $clone->query['orderBy'] = [];
+        $clone->query['limit'] = null;
+        $clone->query['offset'] = null;
+        return $clone->query()->fetchColumn() ?? 0;
+    }
+
+    public function exists(): bool
+    {
+        $clone = clone $this;
+        $clone->query['select'] = ["1"];
+        $clone->query['limit'] = 1;
+        $clone->query['offset'] = 0;
+        $clone->query['orderBy'] = [];
+        return $clone->query()->fetchColumn() !== null;
+    }
+
+    public function paginate(): ?array
+    {
+        if (($limit = intval($this->query['limit'] ?? null)) > 0) {
+            $offset = max(0, intval($this->query['offset'] ?? 0));
+            $page = ceil($offset / $limit) + 1;
+
+            $total = $this->count();
+
+            return compact('total', 'limit', 'offset', 'page');
+        }
+
+        return null;
+    }
+
+    public function getIterator(): Traversable
+    {
+        return $this->query();
+    }
+
+    public function callback(callable|string $callback = null, int $mode = null): static
+    {
+        $this->callback = $callback;
+
+        if (func_num_args() > 1) {
+            $this->mode = $mode;
+        }
+
+        return $this;
+    }
+
+    public function removeWhere(string|\Stringable $condition, string $operator = null, mixed $value = null): static
+    {
+        foreach ($this->query['where'] ?? [] as $offset => $where) {
+            if (($where[1] ?? null) === $condition) {
+                if (($where[2] ?? null) === $operator) {
+                    if (($where[3] ?? null) === $value) {
+                        unset($this->query['where'][$offset]);
+                    }
+                }
+            }
+        }
+
+        return $this;
+    }
+
+    public function whereIfNotSet(string|\Stringable $condition, string $operator = null, mixed $value = null): static
+    {
+        foreach ($this->query['where'] ?? [] as $where) {
+            if (($where[1] ?? null) === $condition) {
+                if (($where[2] ?? null) === $operator) {
+                    if (($where[3] ?? null) === $value) {
+                        return $this;
+                    }
+                }
+            }
+        }
+
+        return $this->where($condition, $operator, $value);
+    }
+
+    public function orWhereIfNotSet(string|\Stringable $condition, string $operator = null, mixed $value = null): static
+    {
+        foreach ($this->query['where'] ?? [] as $where) {
+            if (($where[1] ?? null) === $condition) {
+                if (($where[2] ?? null) === $operator) {
+                    if (($where[3] ?? null) === $value) {
+                        return $this;
+                    }
+                }
+            }
+        }
+
+        return $this->orWhere($condition, $operator, $value);
     }
 
     public function alias(string $alias = null): static
     {
-        $this->primaryTableAlias = $alias ?? '';
+        $this->primaryTableAlias = $alias ? trim($alias, " \t\n\r\0\x0B.`") : $alias;
         return $this;
     }
 
@@ -151,12 +301,7 @@ trait RepositoryTrait
         return $paramName;
     }
 
-    public function getIterator(): Traversable
-    {
-        return $this->query();
-    }
-
-    public function select(string|Stringable ...$columns): static
+    public function select(string|\Stringable ...$columns): static
     {
         $this->resultSet = null;
         $this->manipulate = 'SELECT';
@@ -164,57 +309,57 @@ trait RepositoryTrait
         return $this;
     }
 
-    public function where(Stringable|string $condition, string $operator = null, mixed $value = null): static
+    public function where(string|\Stringable $condition, string $operator = null, mixed $value = null): static
     {
         $this->query['where'][] = ['AND', $condition, $operator, $value];
         return $this;
     }
 
-    public function orWhere(Stringable|string $condition, string $operator = null, mixed $value = null): static
+    public function orWhere(string|\Stringable $condition, string $operator = null, mixed $value = null): static
     {
         $this->query['where'][] = ['OR', $condition, $operator, $value];
         return $this;
     }
 
-    public function whereNot(Stringable|string $condition, string $operator = null, mixed $value = null): static
+    public function whereNot(string|\Stringable $condition, string $operator = null, mixed $value = null): static
     {
         $this->query['where'][] = ['AND NOT', $condition, $operator, $value];
         return $this;
     }
 
-    public function orWhereNot(Stringable|string $condition, string $operator = null, mixed $value = null): static
+    public function orWhereNot(string|\Stringable $condition, string $operator = null, mixed $value = null): static
     {
         $this->query['where'][] = ['OR NOT', $condition, $operator, $value];
         return $this;
     }
 
-    public function and(Stringable|string $condition, mixed $value = null): static
+    public function and(string|\Stringable $condition, mixed $value = null): static
     {
         return $this->where($condition, null, $value);
     }
 
-    public function or(Stringable|string $condition, mixed $value = null): static
+    public function or(string|\Stringable $condition, mixed $value = null): static
     {
         return $this->orWhere($condition, null, $value);
     }
 
-    public function not(Stringable|string $condition, mixed $value = null): static
+    public function not(string|\Stringable $condition, mixed $value = null): static
     {
         return $this->whereNot($condition, null, $value);
     }
 
-    public function orNot(Stringable|string $condition, mixed $value = null): static
+    public function orNot(string|\Stringable $condition, mixed $value = null): static
     {
         return $this->orWhereNot($condition, null, $value);
     }
 
-    public function orderBy(string|Stringable $column, bool $desc = null): static
+    public function orderBy(string|\Stringable $column, bool $desc = null): static
     {
         $this->query['orderBy'][$column] = $desc;
         return $this;
     }
 
-    public function groupBy(string|Stringable ...$columns): static
+    public function groupBy(string|\Stringable ...$columns): static
     {
         foreach ($columns as $column) {
             $this->query['groupBy'][] = $column;
@@ -222,7 +367,7 @@ trait RepositoryTrait
         return $this;
     }
 
-    public function having(string|Stringable $condition, string $operator = null, mixed $value = null): static
+    public function having(string|\Stringable $condition, string $operator = null, mixed $value = null): static
     {
         $this->query['having'][] = [$condition, $operator, $value];
         return $this;
@@ -230,8 +375,8 @@ trait RepositoryTrait
 
     public function limit(int $limit = null, int $page = null): static
     {
-        if ($limit && ($limit > $this->getLimitMax())) {
-            throw ValidationException::of('The limit of a query must not be larger than %s.', $this->getLimitMax());
+        if ($limit && ($limit > $this->__limit_max__())) {
+            throw ValidationException::of('The limit of a query must not be larger than %s.', $this->__limit_max__());
         }
 
         $this->query['limit'] = $limit;
@@ -245,33 +390,88 @@ trait RepositoryTrait
         return $this;
     }
 
-    public function join(string|Stringable $table, string $type = null, string|Stringable $localKey = null, string|Stringable $foreignKey = null): static
+    public function join(string|\Stringable $table, string $type = null, string|\Stringable $localKey = null, string|\Stringable $foreignKey = null): static
     {
         $this->query['join'][] = [$type, $table, $localKey, $foreignKey];
         return $this;
     }
 
-    public function innerJoin(string|Stringable $table, string|Stringable $localKey = null, string|Stringable $foreignKey = null): static
+    public function innerJoin(string|\Stringable $table, string|\Stringable $localKey = null, string|\Stringable $foreignKey = null): static
     {
         return $this->join($table, 'INNER', $localKey, $foreignKey);
     }
 
-    public function leftJoin(string|Stringable $table, string|Stringable $localKey = null, string|Stringable $foreignKey = null): static
+    public function leftJoin(string|\Stringable $table, string|\Stringable $localKey = null, string|\Stringable $foreignKey = null): static
     {
         return $this->join($table, 'LEFT', $localKey, $foreignKey);
     }
 
-    public function rightJoin(string|Stringable $table, string|Stringable $localKey = null, string|Stringable $foreignKey = null): static
+    public function rightJoin(string|\Stringable $table, string|\Stringable $localKey = null, string|\Stringable $foreignKey = null): static
     {
         return $this->join($table, 'RIGHT', $localKey, $foreignKey);
     }
 
-    public function outerJoin(string|Stringable $table, string|Stringable $localKey = null, string|Stringable $foreignKey = null): static
+    public function outerJoin(string|\Stringable $table, string|\Stringable $localKey = null, string|\Stringable $foreignKey = null): static
     {
         return $this->join($table, 'OUTER', $localKey, $foreignKey);
     }
 
-    protected function buildWhereConditions(array $conditions, array &$parameters, int &$paramIndex = 0, string $paramPrefix = null): string
+    protected function __affective_result__(): ?DbResultSet
+    {
+        return $this->resultSet ??= $this->query();
+    }
+
+    protected function __model_class__(): string
+    {
+        return $this->modelClass;
+    }
+
+    protected function __context__(): array
+    {
+        return $this->context ??= [];
+    }
+
+    protected function __connection__(): ?DbConnection
+    {
+        return $this->connection ??= Db::forEntity($this->modelClass);
+    }
+
+    protected function __readOnly__(): bool
+    {
+        return $this->readOnly;
+    }
+
+    protected function __model_table__(): string
+    {
+        return $this->modelTable ??= Db::entity_name($this->__model_class__());
+    }
+
+    protected function __model_primary_key__(): string|array|null
+    {
+        return $this->modelPrimaryKey ??= Db::entity_primary_key($this->__model_class__());
+    }
+
+    protected function __model_primary_keys__(): array
+    {
+        if ($this->modelPrimaryKeys === null) {
+            $key = $this->__model_primary_key__() ?? [];
+            $this->modelPrimaryKeys = is_string($key) ? [$key] : $key;
+        }
+
+        return $this->modelPrimaryKeys;
+    }
+
+    protected function __limit_max__(): int
+    {
+        return $this->context['limit_max'] ?? \env('QUERY_LIMIT_MAX') ?? Db::LIMIT_MAX;
+    }
+
+    protected function __limit_default__(): int
+    {
+        return $this->context['limit_default'] ?? \env('QUERY_LIMIT_DEFAULT') ?? Db::LIMIT_DEFAULT;
+    }
+
+    protected function __build_where_conditions__(array $conditions): string
     {
         $where = [];
 
@@ -288,8 +488,7 @@ trait RepositoryTrait
             } elseif ($value === null) {
                 $where[] = "$and$condition $operator NULL";
             } else {
-                $param = $paramPrefix . $paramIndex++;
-                $parameters[$param] = $value;
+                $param = $this->bindValue($value);
                 if (!$operator) {
                     $operator = is_array($value) ? 'IN' : '=';
                 }
@@ -300,14 +499,14 @@ trait RepositoryTrait
         return $where ? implode(' ', $where) : '';
     }
 
-    protected function buildFrom(): array
+    protected function __build_from__(): array
     {
         $sql = null;
 
         if ($this->primaryTableAlias) {
-            $sql[] = $this->getModelTable() . ' AS ' . $this->primaryTableAlias;
+            $sql[] = $this->__model_table__() . ' AS ' . $this->primaryTableAlias;
         } else {
-            $sql[] = $this->getModelTable();
+            $sql[] = $this->__model_table__();
         }
 
         if (is_array($from = $this->query['from'] ?? null)) {
@@ -325,7 +524,7 @@ trait RepositoryTrait
         return ['FROM', implode(', ', $sql)];
     }
 
-    protected function buildJoin(): array
+    protected function __build_joins__(): array
     {
         $sql = [];
 
@@ -338,12 +537,12 @@ trait RepositoryTrait
         return $sql;
     }
 
-    protected function buildWhere(array &$parameters, int &$paramIndex = 0, string $paramPrefix = null): array
+    protected function __build_where__(): array
     {
         $sql = [];
 
         if (isset($this->query['where'])) {
-            $where = $this->buildWhereConditions($this->query['where'], $parameters, $paramIndex, $paramPrefix);
+            $where = $this->__build_where_conditions__($this->query['where']);
 
             if ($where) {
                 $sql[] = 'WHERE';
@@ -354,7 +553,7 @@ trait RepositoryTrait
         return $sql;
     }
 
-    protected function buildGroupBy(array &$parameters, int &$paramIndex = 0, string $paramPrefix = null): array
+    protected function __build_group_by__(): array
     {
         $sql = [];
 
@@ -363,7 +562,7 @@ trait RepositoryTrait
             $sql[] = implode(',', $this->query['groupBy']);
 
             if (isset($this->query['having'])) {
-                $having = $this->buildWhereConditions($this->query['having'], $parameters, $paramIndex, $paramPrefix);
+                $having = $this->__build_where_conditions__($this->query['having']);
 
                 if ($having) {
                     $sql[] = 'HAVING';
@@ -375,7 +574,7 @@ trait RepositoryTrait
         return $sql;
     }
 
-    protected function buildOrderBy(): array
+    protected function __build_order_by__(): array
     {
         $sql = [];
 
@@ -394,7 +593,7 @@ trait RepositoryTrait
         return $sql;
     }
 
-    protected function buildLimitOffset(): array
+    protected function __build_limit_offset__(): array
     {
         $sql = [];
 
@@ -411,7 +610,7 @@ trait RepositoryTrait
         return $sql;
     }
 
-    protected function buildSelect(): array
+    protected function __build_select__(): array
     {
         $select = $this->query['select'] ?? null;
         if (!is_array($select)) {
@@ -421,180 +620,5 @@ trait RepositoryTrait
         return [
             $this->manipulate ?: 'SELECT', implode(',', $select ?: ['*'])
         ];
-    }
-
-    public function query(): DbResultSet
-    {
-        $this->resultSet = null;
-
-        $parameters = array_merge($this->parameters, []);
-        $paramIndex = $this->paramIndex;
-        $paramPrefix = Db::PARAMETER_PREFIX;
-
-        $sql = [
-            ...$this->buildSelect(),
-            ...$this->buildFrom(),
-            ...$this->buildJoin(),
-            ...$this->buildWhere($parameters, $paramIndex, $paramPrefix),
-            ...$this->buildGroupBy($parameters, $paramIndex, $paramPrefix),
-            ...$this->buildOrderBy(),
-            ...$this->buildLimitOffset(),
-        ];
-
-        if (!$db = $this->connection) {
-            if (!$connection = Db::entity_connection_name($this)) {
-                throw SystemException::of('No connection is configured for the entity %s.', static::class);
-            }
-
-            $db = $this->connection = Db::of($connection);
-        }
-
-        return $this->resultSet = $db
-            ->query(implode(' ', $sql), $parameters)
-            ->mode($this->mode ?? Db::FETCH_DATA)
-            ->callback($this->callback ?? $this->getModelClass())
-            ->alias($this->primaryTableAlias ?: $this->getModelTable())
-            ->cache($this->toCacheResultSet);
-    }
-
-    public function aggregate(string $command, string|Stringable ...$columns): static
-    {
-        $column = implode($columns) ?: '*';
-
-        $clone = clone $this;
-        $clone->query['select'] = "$column($column)";
-        return $clone;
-    }
-
-    public function count(Stringable|string $column = null, bool $distinct = null): int
-    {
-        $column = ($distinct ? 'DISTINCT ' : '') . ($column ?: '*');
-        $clone = $this->aggregate('COUNT', $column);
-        unset($clone->query['orderBy']);
-        unset($clone->query['limit']);
-        unset($clone->query['offset']);
-        return $clone->query()->fetchColumn() ?? 0;
-    }
-
-    public function exists(): bool
-    {
-        $clone = clone $this;
-        $clone->query['select'] = "1";
-        $clone->query['limit'] = 1;
-        $clone->query['offset'] = 0;
-        unset($clone->query['orderBy']);
-        return $clone->query()->exists();
-    }
-
-    public function paginate(): ?array
-    {
-        if (($limit = intval($this->query['limit'] ?? null)) > 0) {
-            $offset = max(0, intval($this->query['offset'] ?? 0));
-            $page = ceil($offset / $limit) + 1;
-
-            $total = $this->count();
-
-            return compact('total', 'limit', 'offset', 'page');
-        }
-
-        return null;
-    }
-
-    public function callback(callable|string $callback = null, int $mode = null): static
-    {
-        $this->callback = $callback;
-
-        if (func_num_args() > 1) {
-            $this->mode = $mode;
-        }
-
-        return $this;
-    }
-
-    public function through(string|RelationInterface $relationClass, string $relationAlias = 'R', string|Stringable ...$columns): RepositoryInterface
-    {
-        if (is_string($relationClass) && !is_subclass_of($relationClass, RelationInterface::class)) {
-            throw ValidationException::of('Invalid relation class: `%s`', $relationClass);
-        }
-
-        $thisModelClass = $this->getModelClass();
-        $relationTable = Db::entity_name($relationClass);
-
-        $this->alias($alias = $this->aliasName() ?: $this->getModelTable());
-
-        $relationPrimaryClass = $relationClass::relation_primary_class();
-        $relationSecondaryClass = $relationClass::relation_secondary_class();
-
-        if (is_subclass_of($thisModelClass, $relationPrimaryClass)) {
-            $foreignKey = $relationClass::relation_primary_column();
-        } elseif (is_subclass_of($thisModelClass, $relationSecondaryClass)) {
-            $foreignKey = $relationClass::relation_secondary_column();
-        } else {
-            throw ValidationException::of(
-                'The entity `%s` is not connected with this entity `%s`.',
-                $relationClass::class,
-                $thisModelClass
-            );
-        }
-
-        if (empty($columns)) {
-            $select = $this->query['select'] ?? null;
-            if (empty($select)) {
-                $this->query['select'] = [$relationAlias . '.*', $alias . '.*'];
-            }
-        } else {
-            $this->query['select'] = $columns;
-        }
-
-        return $this->innerJoin(
-            $relationTable . ' AS ' . $relationAlias,
-            $alias . '.' . $this->getModelPrimaryKey(),
-            $relationAlias . '.' . $foreignKey
-        );
-    }
-
-    public function removeWhere(string|Stringable $condition, string $operator = null, mixed $value = null): static
-    {
-        foreach ($this->query['where'] ?? [] as $offset => $where) {
-            if (($where[1] ?? null) === $condition) {
-                if (($where[2] ?? null) === $operator) {
-                    if (($where[3] ?? null) === $value) {
-                        unset($this->query['where'][$offset]);
-                    }
-                }
-            }
-        }
-
-        return $this;
-    }
-
-    public function whereIfNotSet(string|Stringable $condition, string $operator = null, mixed $value = null): static
-    {
-        foreach ($this->query['where'] ?? [] as $where) {
-            if (($where[1] ?? null) === $condition) {
-                if (($where[2] ?? null) === $operator) {
-                    if (($where[3] ?? null) === $value) {
-                        return $this;
-                    }
-                }
-            }
-        }
-
-        return $this->where($condition, $operator, $value);
-    }
-
-    public function orWhereIfNotSet(string|Stringable $condition, string $operator = null, mixed $value = null): static
-    {
-        foreach ($this->query['where'] ?? [] as $where) {
-            if (($where[1] ?? null) === $condition) {
-                if (($where[2] ?? null) === $operator) {
-                    if (($where[3] ?? null) === $value) {
-                        return $this;
-                    }
-                }
-            }
-        }
-
-        return $this->orWhere($condition, $operator, $value);
     }
 }

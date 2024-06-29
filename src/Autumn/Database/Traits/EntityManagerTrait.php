@@ -1,27 +1,16 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        24/06/2024
- */
 
 namespace Autumn\Database\Traits;
 
-use Autumn\Attributes\Transient;
 use Autumn\Database\Db;
-use Autumn\Database\DbConnection;
 use Autumn\Database\DbException;
 use Autumn\Database\Events\EntityCreatedEvent;
 use Autumn\Database\Events\EntityCreatingEvent;
 use Autumn\Database\Events\EntityDeletedEvent;
 use Autumn\Database\Events\EntityDeletingEvent;
-use Autumn\Database\Events\EntityEventDispatcher;
-use Autumn\Database\Events\EntityEventHandlerInterface;
 use Autumn\Database\Events\EntityUpdatedEvent;
 use Autumn\Database\Events\EntityUpdatingEvent;
-use Autumn\Database\Interfaces\RepositoryInterface;
 use Autumn\Database\Models\Entity;
-use Autumn\Database\Models\Repository;
 use Autumn\Events\Event;
 use Autumn\Exceptions\NotFoundException;
 use Autumn\Exceptions\ServerException;
@@ -33,22 +22,23 @@ trait EntityManagerTrait
     use EntityRepositoryTrait;
 
     /**
-     * Hooks an Entity Event Handler to handle all the necessary events of this entity
+     * Find an entity by the given context.
      *
-     * @param string|EntityEventHandlerInterface $handler
-     * @return void
+     * @param array|int $context The search context or the primary key value.
+     * @return static|null The found entity or null if not found.
      */
-    public static function hook(string|EntityEventHandlerInterface $handler): void
-    {
-        EntityEventDispatcher::hook(static::class, $handler);
-    }
-
     public static function find(array|int $context): ?static
     {
         return static::findBy($context)->query()->fetch();
     }
 
-    public static function findBy(array|int $context): RepositoryInterface
+    /**
+     * Find an entity by the given context and return the repository instance.
+     *
+     * @param array|int $context The search context or the primary key value.
+     * @return static The repository instance with the search conditions applied.
+     */
+    public static function findBy(array|int $context): static
     {
         if (is_int($context)) {
             $context = [Db::entity_primary_key(static::class) => $context];
@@ -62,31 +52,59 @@ trait EntityManagerTrait
         return static::repository($context);
     }
 
+    /**
+     * Find an entity by the given context or throw a NotFoundException if not found.
+     *
+     * @param array|int $context The search context or the primary key value.
+     * @param string|null $messageIfNotFound The exception message if the entity is not found.
+     * @return static The found entity.
+     * @throws NotFoundException If the entity is not found.
+     */
     public static function findOrFail(array|int $context, string $messageIfNotFound = null): static
     {
         return static::find($context) ?? throw NotFoundException::of($messageIfNotFound);
     }
 
+    /**
+     * Find an entity by the given context or return a new instance with the provided data.
+     *
+     * @param array|int $context The search context or the primary key value.
+     * @param array|null $extra Additional data to initialize the new instance.
+     * @return static The found entity or a new instance if not found.
+     */
     public static function findOrNew(array|int $context, array $extra = null): static
     {
+        if (is_int($context)) {
+            $context = [Db::entity_primary_key(static::class) => $context];
+        }
+
         if ($instance = static::find($context)) {
             return $instance;
         }
 
-        $data = array_merge($extra ?? [], is_array($context) ? $context : []);
+        $data = array_merge($extra ?? [], $context);
         return static::from($data);
     }
 
     /**
+     * Find an entity by the given context or create a new one with the provided data.
+     *
+     * @param array|int $context The search context or the primary key value.
+     * @param array|null $extra Additional data to initialize the new instance.
+     * @return static The found entity or the newly created entity if not found.
      * @throws ServerException
      */
     public static function findOrCreate(array|int $context, array $extra = null): static
     {
+        if (is_int($context)) {
+            $context = [Db::entity_primary_key(static::class) => $context];
+        }
+
         if ($instance = static::find($context)) {
             return $instance;
         }
 
-        $data = array_merge($extra ?? [], is_array($context) ? $context : []);
+        $data = array_merge($extra ?? [], $context);
         return static::create($data);
     }
 
@@ -216,21 +234,19 @@ trait EntityManagerTrait
             }
         }
 
-        if (empty($filteredData)) {
-            return $instance; // No changes to update
+        if (!empty($filteredData)) {
+            // Perform the database update
+            $affectedRows = Db::forEntity(static::class)->update($tableName, $filteredData, [
+                static::column_primary_key() => $instance->getId()
+            ]);
+
+            if ($affectedRows < 1) {
+                throw new ServerException(sprintf("Failed to update record of `%s` with ID %d.", $tableName, $instance->getId()));
+            }
+
+            // Dispatch the 'updated' event
+            Event::dispatch(new EntityUpdatedEvent($instance));
         }
-
-        // Perform the database update
-        $affectedRows = Db::forEntity(static::class)->update($tableName, $filteredData, [
-            static::column_primary_key() => $instance->getId()
-        ]);
-
-        if ($affectedRows < 1) {
-            throw new ServerException(sprintf("Failed to update record of `%s` with ID %d.", $tableName, $instance->getId()));
-        }
-
-        // Dispatch the 'updated' event
-        Event::dispatch(new EntityUpdatedEvent($instance));
 
         return $instance;
     }
@@ -265,7 +281,7 @@ trait EntityManagerTrait
      *
      * @param int|self $entity The ID of the entity or the entity object itself.
      * @return bool True if deletion is successful, false otherwise.
-     * @throws \Exception If entity cannot be found or deletion fails.
+     * @throws DbException If entity cannot be found or deletion fails.
      */
     public static function delete(int|self $entity): bool
     {

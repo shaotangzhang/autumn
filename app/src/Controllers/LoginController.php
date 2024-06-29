@@ -1,18 +1,11 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        24/06/2024
- */
-
 namespace App\Controllers;
 
+use App\Api\AuthService;
 use Autumn\Exceptions\ForbiddenException;
 use Autumn\Exceptions\UnauthorizedException;
 use Autumn\System\Controller;
 use Autumn\System\Request;
-use Autumn\System\Response;
-use Autumn\System\Responses\JsonResponse;
 
 class LoginController extends Controller
 {

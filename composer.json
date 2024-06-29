@@ -5,7 +5,11 @@
   "license": "MIT",
   "autoload": {
     "psr-4": {
-      "Autumn\\": "src/Autumn/"
+      "Autumn\\": "src/autumn/",
+      "App\\": "app/src/",
+      "Api\\": "api/src/",
+      "Admin\\": "admin/src/",
+      "Console\\": "console/src/"
     }
   },
   "authors": [
