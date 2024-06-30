@@ -109,7 +109,7 @@ class MiddlewareGroup implements RequestHandlerInterface
         next($this->middlewares);
 
         if (is_string($middleware)) {
-            $middleware = app($middleware, true);
+            $middleware = make($middleware, true);
         }
 
         if ($middleware instanceof MiddlewareInterface) {

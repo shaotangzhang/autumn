@@ -1,190 +1,148 @@
 <?php
+
 namespace Autumn\System;
 
-class Session implements \ArrayAccess, \IteratorAggregate
+use Autumn\System\Sessions\DefaultSession;
+use Autumn\System\Sessions\SessionInterface;
+use Psr\SimpleCache\InvalidArgumentException;
+
+/**
+ * Class Session
+ *
+ * Provides static methods for interacting with sessions, using a SessionInterface for session management.
+ */
+final class Session
 {
-    public function __construct(private readonly string $prefix = '')
+    private static ?SessionInterface $session = null;
+
+    /**
+     * Get the current session context.
+     *
+     * @return SessionInterface
+     */
+    public static function context(): SessionInterface
     {
+        return self::$session ??= make(SessionInterface::class, null, true) ?? DefaultSession::context();
     }
 
-    public static function options(): array
+    /**
+     * Execute a callback with the session context, closing the session afterward.
+     *
+     * @param callable $callback
+     * @return mixed
+     */
+    public static function mute(callable $callback): mixed
     {
-        $options = [];
-
-        if (($lifetime = (int)env('SESSION_LIFETIME', 3600)) > 0) {
-            $options['cookie_lifetime'] = $lifetime;
-        }
-
-        return $options;
+        self::context()->close();
+        return call_user_func($callback, self::context());
     }
 
-    public static function start(): void
+    /**
+     * Execute a callback with the session context, ensuring the session is closed afterwards.
+     *
+     * @param callable $callback
+     * @return mixed
+     */
+    public static function enclosed(callable $callback): mixed
     {
-        if (!isset($_SESSION) || !session_id()) {
-
-            switch (session_status()) {
-                case PHP_SESSION_DISABLED:
-                    throw new \RuntimeException('The session is disabled.');
-
-                case PHP_SESSION_NONE:
-                    if ($options = static::options()) {
-                        $started = session_start($options);
-                    } else {
-                        $started = session_start();
-                    }
-
-                    if (!$started) {
-                        throw new \RuntimeException('Failed to start the session.');
-                    }
-                    break;
-
-                default:
-                    if (!isset($_SESSION)) {
-                        $_SESSION = [];
-                    }
-            }
+        try {
+            return call_user_func($callback, self::context());
+        } finally {
+            self::context()->close();
         }
     }
 
-    public static function close(): void
+    /**
+     * Get a session value by key.
+     *
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     * @throws InvalidArgumentException
+     */
+    public static function get(string $key, mixed $default = null): mixed
     {
-        // if (session_id()) {
-        session_write_close();
-        // }
+        return self::context()->get($key, $default);
     }
 
-    public static function abort(): void
+    /**
+     * Set a session value by key.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return bool
+     * @throws InvalidArgumentException
+     */
+    public static function set(string $key, mixed $value): bool
     {
-        if (session_id()) {
-            session_abort();
-        }
+        return self::context()->set($key, $value);
     }
 
-    public static function destroy(): void
+    /**
+     * Delete a session value by key.
+     *
+     * @param string $key
+     * @return bool
+     * @throws InvalidArgumentException
+     */
+    public static function delete(string $key): bool
     {
-        static::start();
-        session_destroy();
+        return self::context()->delete($key);
     }
 
-    public static function silent(callable $callable, mixed ...$args): mixed
+    /**
+     * Clear all session values.
+     *
+     * @return bool
+     */
+    public static function clear(): bool
     {
-        if (session_id()) {
-            try {
-                session_write_close();
-                return call_user_func_array($callable, $args);
-            } finally {
-                static::start();
-            }
-        } else {
-            return call_user_func_array($callable, $args);
-        }
+        return self::context()->clear();
     }
 
-    public static function get(string $name, mixed $default = null): mixed
+    /**
+     * Check if a session key exists.
+     *
+     * @param string $key
+     * @return bool
+     * @throws InvalidArgumentException
+     */
+    public static function has(string $key): bool
     {
-        static::start();
-        return $_SESSION[$name] ?? $default;
+        return self::context()->has($key);
     }
 
-    public static function has(string $name): bool
-    {
-        static::start();
-        return isset($_SESSION[$name]);
-    }
-
-    public static function set(string $name, mixed $value): void
-    {
-        static::start();
-        $_SESSION[$name] = $value;
-    }
-
-    public static function remove(string $name): void
-    {
-        static::start();
-        unset($_SESSION[$name]);
-    }
-
-    public static function all(): array
-    {
-        static::start();
-        return $_SESSION;
-    }
-
+    /**
+     * Get the current session ID.
+     *
+     * @return string
+     */
     public static function id(): string
     {
-        return session_id();
+        return self::context()->id();
     }
 
-    public static function name(): string
+    /**
+     * Abort the session.
+     */
+    public static function abort(): void
     {
-        return session_name();
+        self::context()->abort();
     }
 
-    public static function transactional(callable $callback, mixed ...$args): mixed
+    /**
+     * Close the session.
+     */
+    public static function close(): void
     {
-        $id = session_id();
-        try {
-            return call_user_func($callback, new static, ...$args);
-        } finally {
-            if (!$id && session_id()) {
-                session_write_close();
-            }
-        }
+        self::context()->close();
     }
 
-    public function getIterator(): \Traversable
+    /**
+     * Destroy the session.
+     */
+    public static function destroy(): void
     {
-        if ($this->prefix) {
-            $all = Session::get($this->prefix);
-            if (is_iterable($all)) {
-                yield from $all;
-            }
-        } else {
-            yield from Session::all();
-        }
-    }
-
-    public function offsetExists(mixed $offset): bool
-    {
-        Session::start();
-
-        if ($this->prefix) {
-            return isset($_SERVER[$this->prefix][$offset]);
-        } else {
-            return isset($_SERVER[$offset]);
-        }
-    }
-
-    public function offsetGet(mixed $offset): mixed
-    {
-        Session::start();
-
-        if ($this->prefix) {
-            return $_SERVER[$this->prefix][$offset] ?? null;
-        } else {
-            return $_SERVER[$offset] ?? null;
-        }
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void
-    {
-        Session::start();
-
-        if ($this->prefix) {
-            $_SERVER[$this->prefix][$offset] = $value;
-        } else {
-            $_SERVER[$offset] = $value;
-        }
-    }
-
-    public function offsetUnset(mixed $offset): void
-    {
-        Session::start();
-
-        if ($this->prefix) {
-            unset($_SERVER[$this->prefix][$offset]);
-        } else {
-            unset($_SERVER[$offset]);
-        }
+        self::context()->destroy();
     }
 }

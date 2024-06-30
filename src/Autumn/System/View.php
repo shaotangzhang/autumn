@@ -43,7 +43,7 @@ class View implements ArrayInterface, Renderable, \ArrayAccess, Translatable
      */
     public function getTemplateService(): ?TemplateService
     {
-        return $this->templateService ??= app(TemplateService::class);
+        return $this->templateService ??= make(TemplateService::class);
     }
 
     /**
@@ -72,7 +72,7 @@ class View implements ArrayInterface, Renderable, \ArrayAccess, Translatable
 
     public function with(array $data): static
     {
-        $this->args = array_merge($this->args, $data);
+        $this->args = array_merge($this->args ?? [], $data);
         return $this;
     }
 
@@ -145,6 +145,15 @@ class View implements ArrayInterface, Renderable, \ArrayAccess, Translatable
     public function defineLayoutSlot(string $slot, callable $definition): void
     {
         $this->context['use_slots'][strtolower($slot)][] = $definition;
+    }
+
+    public function defineLayoutImport(string $src, string $type = null, array $context = null): void
+    {
+        if (!$type) {
+            $type = strtolower(pathinfo(explode('?', $src)[0], PATHINFO_EXTENSION));
+        }
+
+        $this->context['use_imports'][$type][$src] = $context;
     }
 
     public function defineSlot(string $slot, callable $definition): void

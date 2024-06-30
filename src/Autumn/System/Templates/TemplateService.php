@@ -5,6 +5,7 @@ namespace Autumn\System\Templates;
 use Autumn\App;
 use Autumn\I18n\Translation;
 use Autumn\Interfaces\Renderable;
+use Autumn\Lang\HTML;
 use Autumn\System\ClassFactory\DocComment;
 use Autumn\System\Controller;
 use Autumn\System\Extension;
@@ -54,7 +55,13 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
 
     public function render(mixed $data, \ArrayAccess|array $args = null, array $context = null): void
     {
-        echo $this->output($data, $args, $context);
+        $data = $this->output($data, $args, $context);
+
+        if ($data instanceof Renderable) {
+            $data->render();
+        } else {
+            echo $data;
+        }
     }
 
     /**
@@ -71,11 +78,7 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
             $data = call($data, $args, $context);
         }
 
-        if (($data === null) || ($data === false)) {
-            return null;
-        }
-
-        if (is_scalar($data)) {
+        if (is_null($data) || is_scalar($data)) {
             return $data;
         }
 
@@ -83,13 +86,12 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
             foreach ($data as $item) {
                 $this->render($item, $args, $context);
             }
-
             return null;
         }
 
         foreach ($this->renderers as $index => $converter) {
             if (is_string($converter)) {
-                $converter = app($converter, true);
+                $converter = make($converter, true);
 
                 if (!$converter) {
                     unset($this->renderers[$index]);
@@ -102,7 +104,13 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
             $data = $converter->output($data, $args, $context);
         }
 
-        return $data;
+        if ($data instanceof Renderable) {
+            $data->render();
+        } else {
+            echo $data;
+        }
+
+        return null;
     }
 
     /**
@@ -127,10 +135,15 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
         $fileName = DIRECTORY_SEPARATOR . trim(strtr(strtr($template, '\\', '/'), '/', DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR)
             . $this->getTemplateFileExt();
 
-        return realpath($this->getThemeViewPath() . $fileName)
-            ?: realpath($this->getApplicationViewPath() . $fileName)
-                ?: realpath($this->getExtensionViewPath($context) . $fileName)
-                    ?: null;
+        $filePath = $this->getThemeViewPath() . $fileName;
+        if (!realpath($filePath)) {
+            $filePath = $this->getApplicationViewPath() . $fileName;
+            if (!realpath($filePath)) {
+                $filePath = realpath($this->getExtensionViewPath($context) . $fileName);
+            }
+        }
+
+        return $filePath ?: null;
     }
 
     /**
@@ -295,6 +308,45 @@ class TemplateService extends Service implements RendererInterface, ResponseHand
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    $imports = $context['use_imports'] ?? $view->getContext()['use_imports'] ?? null;
+                    if (is_array($imports)) {
+
+                        $importSlots = [];
+
+                        foreach ($imports as $type => $sources) {
+                            if ($type === 'css' || $type === 'style' || $type === 'styles') {
+                                $slotName = 'styles';
+                            } elseif ($type === 'js' || $type === 'script' || $type === 'scripts') {
+                                $slotName = 'scripts';
+                            } else {
+                                continue;
+                            }
+
+                            if (is_array($sources)) {
+                                foreach ($sources as $source => $attributes) {
+                                    if ($slotName === 'styles') {
+                                        $attributes['tagName'] = 'link';
+                                        $attributes['href'] = $source;
+                                    } else {
+                                        $attributes['tagName'] = 'script';
+                                        $attributes['src'] = $source;
+                                    }
+                                    $importSlots[$slotName][$source] ??= $attributes;
+                                }
+                            }
+                        }
+
+                        foreach ($importSlots as $slotName => $imports) {
+                            $layoutView->defineSlot($slotName, function () use ($imports) {
+                                foreach ($imports as $attributes) {
+                                    $tagName = $attributes['tagName'];
+                                    unset($attributes['tagName']);
+                                    HTML::outputElement($tagName, $attributes);
+                                }
+                            });
                         }
                     }
 

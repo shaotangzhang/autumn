@@ -33,7 +33,7 @@ class Dispatcher implements ListenerProviderInterface
 
             if (is_string($listener)) {
                 if (is_subclass_of($listener, EventHandlerInterface::class)) {
-                    if ($handler = app($listener, true)) {
+                    if ($handler = make($listener, true)) {
                         yield [$handler, 'handle'];
                     }
                 } elseif (is_callable($listener)) {
@@ -128,7 +128,7 @@ class Dispatcher implements ListenerProviderInterface
     protected function invokeClassHandler(string $handlerClass, EventInterface $event): void
     {
         if (is_subclass_of($handlerClass, EventHandlerInterface::class)) {
-            $handler = app($handlerClass, true);
+            $handler = make($handlerClass, true);
             $handler->handle($event);
         } else {
             throw new \InvalidArgumentException(sprintf(

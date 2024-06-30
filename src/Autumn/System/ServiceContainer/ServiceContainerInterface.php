@@ -23,6 +23,18 @@ interface ServiceContainerInterface
     public function isBound(string $abstract): bool;
 
     /**
+     * Factory method to create instances of classes with support for singletons,
+     * contexts, bindings, and decorators.
+     *
+     * @param string $abstract The abstract class name or interface.
+     * @param array|null $args Optional arguments for the class constructor.
+     * @param array|null $context Optional context for the instance creation.
+     * @param \Throwable|null &$error Reference to capture any thrown error.
+     * @return mixed The created instance or null on failure.
+     */
+    public function factory(string $abstract, array $args = null, array $context = null, \Throwable &$error = null): mixed;
+
+    /**
      * Resolve an abstract to its concrete implementation or create a new instance if not bound.
      *
      * @param string $abstract The abstract class or interface name

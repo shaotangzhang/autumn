@@ -101,9 +101,16 @@ class Translation implements \IteratorAggregate
         return $g;
     }
 
+    public function getText(string $text, string $lang = null): ?string
+    {
+        return $this->messages[$text]
+            ?? static::$translations[$lang ?? $this->lang ?: static::lang()][$this->domain][$text]
+            ?? null;
+    }
+
     public function format(string $text, mixed ...$args): ?string
     {
-        if ($format = $this->messages[$text] ?? static::$translations[$this->lang ?: static::lang()][$this->domain][$text] ?? null) {
+        if ($format = $this->getText($text)) {
             if ($args) {
                 return vsprintf($format, $args);
             }
@@ -114,9 +121,9 @@ class Translation implements \IteratorAggregate
         return null;
     }
 
-    public function translate(string $text, array $args, string $lang = null): string
+    public function translate(string $text, array $args, string $lang = null): ?string
     {
-        if ($format = $this->messages[$text] ?? static::$translations[($lang ?? $this->lang) ?: static::lang()][$this->domain][$text] ?? null) {
+        if ($format = $this->getText($text, $lang)) {
             if ($args) {
                 return vsprintf($format, $args);
             }
@@ -124,7 +131,7 @@ class Translation implements \IteratorAggregate
             return $format;
         }
 
-        return $text;
+        return null;
     }
 
     public function reset(): void

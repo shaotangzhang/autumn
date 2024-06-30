@@ -250,26 +250,24 @@ class HTML
             if ($attributes) {
                 echo static::renderAttributes($attributes);
             }
-        }
-
-        if ($enclosure) {
-            echo '/>';
-        } else {
-            if ($tagName) {
+            if ($enclosure) {
+                echo '/>';
+                return;
+            }else{
                 echo '>';
             }
+        }
 
-            $callback = $context['renderCallback'] ?? null;
-            if ($callback instanceof Closure) {
-                call_user_func($callback, $context, $textContent, $children);
-            } else {
-                static::output(static::encode($textContent));
-                static::output($children);
-            }
+        $callback = $context['renderCallback'] ?? null;
+        if ($callback instanceof Closure) {
+            call_user_func($callback, $context, $textContent, $children);
+        } else {
+            static::output(static::encode($textContent));
+            static::output($children);
+        }
 
-            if ($tagName) {
-                echo '</', $tagName, '>';
-            }
+        if ($tagName) {
+            echo '</', $tagName, '>';
         }
     }
 

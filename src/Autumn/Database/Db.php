@@ -216,4 +216,13 @@ class Db
             ? call_user_func([$entity, 'column_updated_at'])
             : '';
     }
+
+    /**
+     * @throws \Throwable
+     */
+    public static function transaction(callable $callable, string|EntityInterface $entity = null): mixed
+    {
+        $connection = $entity ? static::forEntity($entity) : static::of();
+        return $connection->transaction($callable);
+    }
 }

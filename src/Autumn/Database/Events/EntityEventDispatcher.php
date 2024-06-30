@@ -77,7 +77,7 @@ class EntityEventDispatcher implements EventHandlerInterface, ContextInterface
         foreach (self::REGISTERED_EVENTS as $action => $event) {
             if (method_exists($handler, $action)) {
                 if (is_string($handler)) {
-                    self::listen($event, $entity, fn($e) => app($handler, true)->$action($e));
+                    self::listen($event, $entity, fn($e) => make($handler, true)->$action($e));
                 } else {
                     self::listen($event, $entity, [$handler, $action]);
                 }
@@ -181,7 +181,7 @@ class EntityEventDispatcher implements EventHandlerInterface, ContextInterface
     protected function invokeClassHandler(string $handlerClass, EventInterface $event): void
     {
         if (is_subclass_of($handlerClass, EventHandlerInterface::class)) {
-            $handler = app($handlerClass, true);
+            $handler = make($handlerClass, true);
             $handler->handle($event);
         } else {
             throw new \InvalidArgumentException(sprintf(

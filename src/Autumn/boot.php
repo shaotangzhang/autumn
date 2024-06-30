@@ -1,14 +1,18 @@
 <?php
 
 use Autumn\App;
+use Autumn\Database\Interfaces\SiteInterface;
 use Autumn\Events\Event;
 use Autumn\I18n\Locale;
 use Autumn\I18n\Translatable;
 use Autumn\I18n\Translation;
+use Autumn\System\Application;
 use Autumn\System\Request;
 use Autumn\System\Route;
+use Autumn\System\Templates\Component;
 use Autumn\System\Templates\TemplateService;
 use Autumn\System\View;
+use Composer\Autoload\ClassLoader;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -31,33 +35,38 @@ if (!function_exists('env')) {
 
 if (!function_exists('app')) {
     /**
-     * Get the application instance or a specific service from the container.
+     * Retrieves or bootstraps the application instance.
      *
-     * @param string|null $class The class name or service identifier.
-     * @param bool|string|callable|null $concrete The concrete implementation or binding callback.
-     * @return mixed The application instance or the requested service.
+     * @param string $appName The name of the application.
+     * @param ClassLoader|null $classLoader The class loader to use.
+     * @return Application|null The application instance.
      */
-    function app(string $class = null, bool|string|callable $concrete = null): mixed
+    function app(string $appName = 'app', ClassLoader $classLoader = null): ?Application
     {
         static $app;
-        if ($app === null) {
-            $app = App::context();
 
-            if (!$app) {
-                if (!preg_match('/^\w+$/', $class ??= 'app')) {
-                    exit('Invalid application name: ' . $class);
-                }
+        return $app ??= App::context()
+            ?? App::boot($appName, $classLoader ?? require_once DOC_ROOT . '/vendor/autoload.php');
+    }
+}
 
-                return $app = App::boot($class, require_once DOC_ROOT . '/vendor/autoload.php');
-            }
-        }
-
-        if (!is_string($class) || !($class = trim($class))) {
-            return $app;
-        }
-
+if (!function_exists('make')) {
+    /**
+     * Creates an instance of the specified class.
+     *
+     * @param string $class The class to instantiate.
+     * @param bool|string|callable|null $concrete The concrete implementation or a factory.
+     * @param bool $silent Whether to suppress exceptions.
+     * @return mixed The created instance.
+     */
+    function make(string $class, bool|string|callable $concrete = null, bool $silent = false): mixed
+    {
         static $container;
-        $container ??= $app->getServiceContainer();
+        $container ??= app()?->getServiceContainer();
+
+        if (!$container) {
+            exit('The application is not ready yet.');
+        }
 
         if ($concrete) {
             if (!$container->isBound($class)) {
@@ -65,7 +74,11 @@ if (!function_exists('app')) {
             }
         }
 
-        return $container->make($class);
+        if ($silent) {
+            return $container->factory($class);
+        } else {
+            return $container->make($class);
+        }
     }
 }
 
@@ -89,39 +102,6 @@ if (!function_exists('call')) {
     }
 }
 
-if (!function_exists('broadcast')) {
-    /**
-     * Broadcast an event with the given arguments.
-     *
-     * @param string $event The name of the event to broadcast.
-     * @param object|array|null $sender The event sender or an array of arguments.
-     * @param array|null $args Additional arguments to pass to the event handlers.
-     * @return void
-     */
-    function broadcast(string $event, object|array $sender = null, array $args = null): void
-    {
-        if (is_array($sender)) {
-            Event::broadcast($event, null, array_merge($sender, $args ?? []));
-        } else {
-            Event::broadcast($event, $sender, $args);
-        }
-    }
-}
-
-if (!function_exists('hook')) {
-    /**
-     * Register an event handler for a specific event.
-     *
-     * @param string $event The name of the event to listen for.
-     * @param callable $handler The event handler to register.
-     * @return void
-     */
-    function hook(string $event, callable $handler): void
-    {
-        Event::listen($event, $handler);
-    }
-}
-
 if (!function_exists('translate')) {
     /**
      * Translate a given text string using the localization system.
@@ -130,6 +110,8 @@ if (!function_exists('translate')) {
      * @param array|null $args Optional arguments to replace placeholders in the text.
      * @param string|null $domain The translation domain to use.
      * @return string The translated text string.
+     *
+     * @deprecated
      */
     function translate(string $text, array $args = null, string $domain = null): string
     {
@@ -137,85 +119,158 @@ if (!function_exists('translate')) {
     }
 }
 
-if (!function_exists('translation')) {
-    /**
-     * Translate a given text string using the localization system.
-     *
-     * @param string|Translatable $domain
-     * @param string|null $lang
-     * @return callable The translated text string.
-     */
-    function translation(string|Translatable $domain, string $lang = null): callable
-    {
-        if (is_string($domain)) {
-            $domain = new Translation($domain, $lang);
-        }
-
-        return fn(string $text, mixed ...$args) => $domain->translate($text, ...$args);
-    }
-}
-
-if (!function_exists('translatable')) {
-    function translatable(callable $callback, string|Translation $domain, string $lang = null)
-    {
-        $translation = is_string($domain) ? new Translation($domain, $lang) : $domain;
-        $origin = Translation::global($translation);
-
-        try {
-            return call_user_func($callback);
-        } finally {
-            Translation::global($origin);
-        }
-    }
-}
-
 if (!function_exists('t')) {
-    function t(?string $text, mixed ...$args): ?string
+    /**
+     * Retrieve the translated text for a given key or return the default value.
+     *
+     * This function attempts to get the translation of the given text key from the global
+     * translation system. If the translation is not found, it returns the provided default value.
+     *
+     * @param string|null $text The text key to be translated.
+     * @param mixed $default The default value to return if the translation is not found.
+     * @param string|null $lang The language code for the translation (optional).
+     * @return string|null The translated text or the default value if no translation is found.
+     */
+    function t(?string $text, mixed $default = null, string $lang = null): ?string
     {
-        return Translation::global()?->translate($text, $args) ?? $text;
+        return Translation::global()?->translate($text, [], $lang) ?? $default;
     }
 }
 
-if (!function_exists('action')) {
+if (!function_exists('tt')) {
     /**
-     * Process a route and return the response.
+     * Retrieve the translated text for a given key.
      *
-     * @param string $route The route path to process.
-     * @param array|ArrayAccess|null $args The route parameters or request object.
-     * @param array|null $context The request context, such as the HTTP method.
-     * @return ResponseInterface|null The response object, or null if no route matches.
+     * @param string|null $text The text key to be translated.
+     * @param mixed ...$args
+     * @return string|null The translated text or the default value if no translation is found.
      */
-    function action(string $route, array|ArrayAccess $args = null, array $context = null): ?ResponseInterface
+    function tt(?string $text, mixed ...$args): ?string
     {
-        if ($args instanceof ServerRequestInterface) {
-            $request = $args;
-        } else {
-            $request = Request::context();
-            if ($args) {
-                $request = $request->withQueryParams($args);
-            }
+        return Translation::global()?->format($text, ...$args);
+    }
+}
+
+if (!function_exists('t_text')) {
+    /**
+     * Translate the given text with arguments.
+     *
+     * @param string|null $text The key for the translation text.
+     * @param mixed ...$args The arguments to replace placeholders in the translation text.
+     * @return string|null The translated text with arguments applied.
+     */
+    function t_text(?string $text, mixed ...$args): ?string
+    {
+        return Translation::global()?->translate($text, $args);
+    }
+}
+
+if (!function_exists('t_html')) {
+    /**
+     * Translate the given text with arguments and escape it for HTML output.
+     *
+     * @param string|null $text The key for the translation text.
+     * @param mixed ...$args The arguments to replace placeholders in the translation text.
+     * @return string|null The translated and HTML-escaped text.
+     */
+    function t_html(?string $text, mixed ...$args): ?string
+    {
+        if ($html = tt($text, ...$args)) {
+            return htmlspecialchars($html, ENT_QUOTES, 'UTF-8');
+        }
+        return null;
+    }
+}
+
+if (!function_exists('t_attr')) {
+    /**
+     * Translate the given text with arguments and escape it for use in HTML attributes.
+     *
+     * @param string|null $text The key for the translation text.
+     * @param mixed ...$args The arguments to replace placeholders in the translation text.
+     * @return string|null The translated and attribute-escaped text.
+     */
+    function t_attr(?string $text, mixed ...$args): ?string
+    {
+        if ($attr = tt($text, ...$args)) {
+            return htmlspecialchars($attr, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+        return null;
+    }
+}
+
+if (!function_exists('component')) {
+    /**
+     * Creates an instance of a component
+     *
+     * @param string $name
+     * @param array|null $attributes
+     * @param array|null $context
+     * @param mixed ...$children
+     * @return Component|null
+     */
+    function component(string $name, array $attributes = null, array $context = null, mixed ...$children): ?Component
+    {
+        $viewName = strtr($name, ['\\' => '/', '.' => '/', '::' => '/', ':' => '/', '//' => '/']);
+        $view = new View('/component/' . $viewName);
+
+        $component = new Component($context['tagName'] ?? strtr($name, '/', '-'), $attributes, $context, ...$children);
+        $component->setView($view);
+        return $component;
+    }
+}
+
+if (!function_exists('html')) {
+    /**
+     * Escapes HTML content to make it safe for output.
+     *
+     * @param string|null $html The HTML content to escape.
+     * @return string|null The escaped HTML content, or null if input is null.
+     */
+    function html(string $html = null): ?string
+    {
+        if (is_string($html)) {
+            return htmlspecialchars($html, ENT_COMPAT, 'UTF-8');
+        }
+        return $html;
+    }
+}
+
+if (!function_exists('attr')) {
+    /**
+     * Escapes attribute values to make them safe for output in HTML attributes.
+     *
+     * @param string|null $text The attribute value to escape.
+     * @return string|null The escaped attribute value, or null if input is null.
+     */
+    function attr(string $text = null): ?string
+    {
+        if (is_string($text)) {
+            return htmlspecialchars($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+        return $text;
+    }
+}
+
+if (!function_exists('url')) {
+    /**
+     * Generates a URL with optional query parameters and fragment.
+     *
+     * @param string|null $path The base path of the URL.
+     * @param array|null $args The query parameters to append to the URL.
+     * @param string|null $fragment The fragment to append to the URL.
+     * @return string|null The generated URL, or null if path is null.
+     */
+    function url(?string $path = null, ?array $args = null, ?string $fragment = null): ?string
+    {
+        if ($args) {
+            $path .= '?' . http_build_query($args);
         }
 
-        $request = $request->withMethod($context['method'] ?? 'GET')
-            ->withUri($request->getUri()->withPath($route));
+        if ($fragment) {
+            $path .= '#' . rawurlencode($fragment);
+        }
 
-        return Route::matches($request)?->handle($request);
+        return $path;
     }
 }
-
-if (!function_exists('view')) {
-    /**
-     * Render a specified view template.
-     *
-     * @param string $name The name of the view template.
-     * @param array|ArrayAccess|null $args The parameters to pass to the view template.
-     * @param array|null $context The context for rendering the view.
-     * @return void
-     */
-    function view(string $name, array|ArrayAccess $args = null, array $context = null): void
-    {
-        $view = new View($name, $args, $context);
-        TemplateService::context()->renderView($view);
-    }
-}
-

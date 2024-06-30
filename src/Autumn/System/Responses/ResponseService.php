@@ -75,7 +75,7 @@ class ResponseService implements ContextInterface, ResponseHandlerInterface
         // Parse the Accept header to determine the appropriate handlers
         $accepts = explode(',', $_SERVER['HTTP_ACCEPT'] ?? '*/*');
         foreach ($accepts as $accept) {
-            $accept = strtolower(trim($accept));
+            $accept = strtolower(trim(explode(',',$accept)[0]));
             foreach (self::$contentTypeHandlers[$accept] ?? [] as $handler) {
                 $handlers[] = $handler;
             }
@@ -85,7 +85,7 @@ class ResponseService implements ContextInterface, ResponseHandlerInterface
         foreach (array_unique($handlers) as $handler) {
             if (is_subclass_of($handler, ResponseHandlerInterface::class)) {
                 if (is_string($handler)) {
-                    $handler = app($handler, true);
+                    $handler = make($handler, true);
                 }
 
                 if ($handler instanceof ResponseHandlerInterface) {

@@ -44,6 +44,10 @@ final class App
 
     public static function boot(string $appName, ClassLoader $classLoader)
     {
+        if (!preg_match('/^\w+$/', $appName ??= 'app')) {
+            exit('Invalid application name: ' . $appName);
+        }
+
         if (self::$classLoader || self::$application) {
             exit('The application is already boot.');
         }

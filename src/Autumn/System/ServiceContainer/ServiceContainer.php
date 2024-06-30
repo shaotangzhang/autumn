@@ -16,10 +16,10 @@ use Autumn\Interfaces\SingletonInterface;
  */
 class ServiceContainer implements ServiceContainerInterface
 {
-    private array $bindings = [];      // Holds bindings for abstract classes or interfaces
+    private array $abstractBindings = [];      // Holds bindings for abstract classes or interfaces
     private array $contexts = [];      // Holds context data for bindings
-    private array $instances = [];     // Holds singleton instances
-    private array $temporaries = [];   // Holds temporary instances during construction
+    private array $sharedInstances = [];     // Holds singleton instances
+    private array $instancesDuringInjection = [];   // Holds temporary instances during construction
     private ?ParameterResolverInterface $parameterResolver = null;
 
     public static function defaultParameterResolver(): ParameterResolverInterface
@@ -47,7 +47,7 @@ class ServiceContainer implements ServiceContainerInterface
      */
     public function bind(string $abstract, callable|object|string $concrete, array $context = []): void
     {
-        if (isset($this->bindings[$abstract]) || isset($this->instances[$abstract])) {
+        if (isset($this->abstractBindings[$abstract]) || isset($this->sharedInstances[$abstract])) {
             if ($context['ignore_bound'] ?? null) {
                 return;
             }
@@ -57,7 +57,7 @@ class ServiceContainer implements ServiceContainerInterface
 
         if (is_object($concrete) && !($concrete instanceof \Closure)) {
             // If concrete is an object, store it as an instance
-            $this->instances[$abstract] = $concrete;
+            $this->sharedInstances[$abstract] = $concrete;
         } else {
             // Validate concrete type
             if (is_string($concrete) && !is_callable($concrete) && !class_exists($concrete)) {
@@ -65,8 +65,70 @@ class ServiceContainer implements ServiceContainerInterface
             }
 
             // Store the binding and its context
-            $this->bindings[$abstract] = $concrete;
+            $this->abstractBindings[$abstract] = $concrete;
             $this->contexts[$abstract] = $context;
+        }
+    }
+
+    /**
+     * Creates or retrieves an instance of the specified abstract class.
+     *
+     * @param string $abstract The abstract class or interface to resolve.
+     * @param array|null $args The arguments to pass to the constructor.
+     * @param array|null $context The context in which the instance is being created.
+     * @param \Throwable|null $error The variable to hold any exception that occurs during instance creation.
+     * @return mixed The created instance or null if an error occurs.
+     */
+    public function factory(string $abstract, array $args = null, array $context = null, \Throwable &$error = null): mixed
+    {
+        // Return existing shared instance if already created
+        if (isset($this->sharedInstances[$abstract])) {
+            return $this->sharedInstances[$abstract];
+        }
+
+        // Return temporary instance if it exists during injection process
+        if (isset($this->instancesDuringInjection[$abstract])) {
+            return $this->instancesDuringInjection[$abstract];
+        }
+
+        // Handle singleton classes
+        if (is_subclass_of($abstract, SingletonInterface::class)) {
+            return $abstract::getInstance();
+        }
+
+        // Handle context-aware classes
+        if (is_subclass_of($abstract, ContextInterface::class)) {
+            return $abstract::context();
+        }
+
+        // Resolve binding for the abstract class
+        if ($binding = $this->abstractBindings[$abstract] ?? null) {
+            $bindingContext = $this->contexts[$abstract] ?? $context;
+            return $this->abstractBindings[$abstract] = $this->factory($binding, $args, $bindingContext);
+        }
+
+        // Handle callable bindings (factories)
+        if (is_callable($binding)) {
+            $bindingContext = $this->contexts[$abstract] ?? $context;
+            return $this->sharedInstances[$abstract] = $this->invoke(callable: $binding, args: $args, context: $bindingContext);
+        }
+
+        // Handle decorator proxies if the environment variable is set
+        static $useClassDecoratorProxy;
+        if ($useClassDecoratorProxy ??= env('USE_CLASS_DECORATOR_PROXY', false)) {
+            if (($proxyClass = DecoratorProxy::createProxyClass(class: $abstract))) {
+                $this->abstractBindings[$abstract] = $proxyClass;
+                $binding = $proxyClass;
+            }
+        }
+
+        // Create a new instance of the concrete class
+        try {
+            return $this->sharedInstances[$abstract] = $this->createInstance(class: $binding ?? $abstract, args: $args, context: $context);
+        } catch (\ReflectionException $ex) {
+            // Capture and return the exception for error handling
+            $error = $ex;
+            return null;
         }
     }
 
@@ -78,46 +140,59 @@ class ServiceContainer implements ServiceContainerInterface
      */
     public function make(string $abstract): mixed
     {
-        if (isset($this->instances[$abstract])) {
-            return $this->instances[$abstract];
-        }
-
-        if (isset($this->temporaries[$abstract])) {
-            return $this->temporaries[$abstract];
-        }
-
-        // Check if the abstract class implements SingletonInterface
-        if (is_subclass_of($abstract, SingletonInterface::class)) {
-            return $abstract::getInstance();
-        }
-
-        if (is_subclass_of($abstract, ContextInterface::class)) {
-            return $abstract::context();
-        }
-
-        // Fetch the binding for the abstract
-        $binding = $this->bindings[$abstract] ?? null;
-        if (!$binding) {
+        $result = $this->factory($abstract, error: $error);
+        if (!$result) {
             throw new \RuntimeException("Class '$abstract' is not bound.");
         }
 
-        // Handle callable bindings (factories)
-        if (is_callable($binding)) {
-            return $this->instances[$abstract] = $this->invoke($binding, [], $this->contexts[$abstract] ?? []);
+        if ($error) {
+            throw new \RuntimeException("Failed to instantiate service '$abstract'.", E_ERROR, $error);
         }
 
-        if (env('USE_CLASS_DECORATOR_PROXY')) {
-            if (($binding = DecoratorProxy::createProxyClass($abstract))) {
-                $this->bindings[$abstract] = $binding;
-            }
-        }
+        return $result;
 
-        // Create a new instance of the concrete class
-        try {
-            return $this->instances[$abstract] = $this->createInstance($binding);
-        } catch (\ReflectionException $ex) {
-            throw new \RuntimeException("Failed to instantiate service '$abstract'.", E_ERROR, $ex);
-        }
+//
+//        if (isset($this->instances[$abstract])) {
+//            return $this->instances[$abstract];
+//        }
+//
+//        if (isset($this->temporaries[$abstract])) {
+//            return $this->temporaries[$abstract];
+//        }
+//
+//        // Check if the abstract class implements SingletonInterface
+//        if (is_subclass_of($abstract, SingletonInterface::class)) {
+//            return $abstract::getInstance();
+//        }
+//
+//        if (is_subclass_of($abstract, ContextInterface::class)) {
+//            return $abstract::context();
+//        }
+//
+//        // Fetch the binding for the abstract
+//        $binding = $this->bindings[$abstract] ?? null;
+//        if (!$binding) {
+//            throw new \RuntimeException("Class '$abstract' is not bound.");
+//        }
+//
+//        // Handle callable bindings (factories)
+//        if (is_callable($binding)) {
+//            return $this->instances[$abstract] = $this->invoke($binding, [], $this->contexts[$abstract] ?? []);
+//        }
+//
+//        static $useClassDecoratorProxy;
+//        if ($useClassDecoratorProxy ??= env('USE_CLASS_DECORATOR_PROXY')) {
+//            if (($binding = DecoratorProxy::createProxyClass($abstract))) {
+//                $this->bindings[$abstract] = $binding;
+//            }
+//        }
+//
+//        // Create a new instance of the concrete class
+//        try {
+//            return $this->instances[$abstract] = $this->createInstance($binding);
+//        } catch (\ReflectionException $ex) {
+//            throw new \RuntimeException("Failed to instantiate service '$abstract'.", E_ERROR, $ex);
+//        }
     }
 
     /**
@@ -128,7 +203,7 @@ class ServiceContainer implements ServiceContainerInterface
      */
     public function isBound(string $abstract): bool
     {
-        return isset($this->instances[$abstract]) || isset($this->bindings[$abstract]);
+        return isset($this->sharedInstances[$abstract]) || isset($this->abstractBindings[$abstract]);
     }
 
     /**
@@ -159,20 +234,24 @@ class ServiceContainer implements ServiceContainerInterface
      * Create a new instance of a class with resolved constructor dependencies.
      *
      * @param string $class The class name to instantiate
-     * @param array $context Optional context data for the constructor
+     * @param array|null $args Optional arguments for the constructor
+     * @param array|null $context Optional context data for the constructor
      * @return mixed The new instance of the class
-     * @throws \RuntimeException If instantiation fails
      * @throws \ReflectionException If reflection fails during instantiation
      */
-    protected function createInstance(string $class, array $context = []): mixed
+    protected function createInstance(string $class, array $args = null, array $context = null): mixed
     {
         $reflection = new \ReflectionClass($class);
+        if (!$reflection->isInstantiable()) {
+            throw new \ReflectionException('The abstract `' . $class . '` is not instantiable.');
+        }
+
         $instance = $reflection->newInstanceWithoutConstructor();
 
         if ($constructor = $reflection->getConstructor()) {
-            $this->temporaries[$class] = $instance;
-            $constructor->invoke($instance, $this->injectParameters($constructor, $context));
-            unset($this->temporaries[$class]);
+            $this->instancesDuringInjection[$class] = $instance;
+            $constructor->invoke($instance, $this->injectParameters($constructor, $args, $context));
+            unset($this->instancesDuringInjection[$class]);
         }
 
         return $instance;
@@ -204,6 +283,8 @@ class ServiceContainer implements ServiceContainerInterface
                 $arguments[$name] = $args[$name];
             } elseif (isset($args[$offset])) {
                 $arguments[$name] = $args[$offset];
+            } else if ($name === 'context') {
+                $arguments[$name] = $context;
             } else {
                 $arguments[$name] = $parameter->isDefaultValueAvailable() ? $parameter->getDefaultValue() : null;
 
@@ -232,62 +313,5 @@ class ServiceContainer implements ServiceContainerInterface
         }
 
         return $arguments;
-    }
-
-    protected function resolveParameter(
-        \ReflectionParameter       $parameter,
-        ParameterResolverInterface $resolver = null,
-        array|\ArrayAccess         $args = null,
-        array                      $context = null
-    ): mixed
-    {
-        $name = $parameter->getName();
-
-        if ($resolver) {
-            $type = $parameter->getType();
-            $types = ($type instanceof \ReflectionNamedType) ? [$type] : $type->getTypes();
-
-            $isBuiltIn = false;
-            foreach ($types as $type) {
-                if (!$isBuiltIn) {
-                    $isBuiltIn = $type->isBuiltin();
-                }
-
-                try {
-                    // Attempt to resolve using the resolver
-                    $value = $resolver->resolve($name, $type, $args, $context);
-                    if ($value !== null) {
-                        return $value;
-                    }
-                } catch (AccessDeniedException|ForbiddenException|NotFoundException|UnauthorizedException $ex) {
-                    throw $ex;
-                } catch (\Throwable $ex) {
-                    // Log or handle the exception as needed
-                    // Continue to try the next type if available
-                }
-            }
-
-            if (!$isBuiltIn) {
-                throw ValidationException::of('Unable to parse the value of parameter `%s`.', $name);
-            }
-        }
-
-        // Fallback to $args if available
-        if (isset($args[$name])) {
-            return $args[$name];
-        }
-
-        // Use default value if parameter has one
-        if ($parameter->isDefaultValueAvailable()) {
-            return $parameter->getDefaultValue();
-        }
-
-        // Throw exception if parameter is required and cannot be resolved
-        if (!$parameter->allowsNull()) {
-            throw ValidationException::of('The `%s` is required.', $name);
-        }
-
-        // Default to null if parameter allows null and cannot be resolved
-        return null;
     }
 }

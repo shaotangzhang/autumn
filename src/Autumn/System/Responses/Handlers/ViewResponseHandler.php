@@ -31,7 +31,7 @@ class ViewResponseHandler implements ContextInterface, ResponseHandlerInterface
     {
         if ($data instanceof View) {
             // Attempt to use a TemplateService to render the view
-            if ($service = app(TemplateService::class, true)) {
+            if ($service = make(TemplateService::class, true)) {
                 $context['use_layout'] = !!env('THEME_USE_LAYOUT');
                 return new CallableResponse(fn() => $service->outputView($data, $context), $statusCode);
             }

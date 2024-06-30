@@ -59,20 +59,20 @@ class DecoratorProxy
     /**
      * Creates a decorating proxy class for the given abstract class.
      *
-     * @param string $abstract The fully qualified name of the abstract class.
+     * @param string $class The fully qualified name of the abstract class.
      * @return string|null The fully qualified name of the proxy class, or null if it could not be created.
      */
-    public static function createProxyClass(string $abstract): ?string
+    public static function createProxyClass(string $class): ?string
     {
-        $abstract = trim($abstract, '/\\');
-        if (isset(self::$proxies[$abstract])) {
-            return self::$proxies[$abstract];
+        $class = trim($class, '/\\');
+        if (isset(self::$proxies[$class])) {
+            return self::$proxies[$class];
         }
 
-        self::$proxies[$abstract] = false;
+        self::$proxies[$class] = false;
 
         try {
-            $reflection = new \ReflectionClass($abstract);
+            $reflection = new \ReflectionClass($class);
             if (empty($reflection->getAttributes(Decorated::class))) {
                 return null;
             }
@@ -80,21 +80,21 @@ class DecoratorProxy
             return null;
         }
 
-        $proxyClass = 'Temp\\' . $abstract;
+        $proxyClass = 'Temp\\' . $class;
         $file = App::map('storage', 'classes', strtr($proxyClass, '\\', DIRECTORY_SEPARATOR) . '.php');
 
         if (self::isProxyUpToDate($file, $reflection->getFileName())) {
-            return self::$proxies[$abstract] = $proxyClass;
+            return self::$proxies[$class] = $proxyClass;
         }
 
         if (!self::prepareDirectory($file)) {
             return null;
         }
 
-        $classFile = self::generateClassFile($reflection, $proxyClass, $abstract);
+        $classFile = self::generateClassFile($reflection, $proxyClass, $class);
 
         if ($classFile && file_put_contents($file, (string)$classFile)) {
-            return self::$proxies[$abstract] = $proxyClass;
+            return self::$proxies[$class] = $proxyClass;
         }
 
         return null;
