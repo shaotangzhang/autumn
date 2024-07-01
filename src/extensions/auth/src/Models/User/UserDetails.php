@@ -1,11 +1,16 @@
 <?php
+
 namespace Autumn\Extensions\Auth\Models\User;
 
+use Autumn\Attributes\JsonIgnore;
+use Autumn\Exceptions\AuthenticationException;
 use Autumn\Extensions\Auth\Interfaces\UserDetailsInterface;
 
 class UserDetails implements UserDetailsInterface
 {
     private string $username = '';
+
+    #[JsonIgnore]
     private string $password = '';
     private bool $enabled = false;
     private bool $accountNonLocked = false;
@@ -69,5 +74,26 @@ class UserDetails implements UserDetailsInterface
     public function getUsername(): string
     {
         return $this->username;
+    }
+
+    public function verify(): static
+    {
+        if (!$this->isEnabled()) {
+            throw AuthenticationException::of('The account is suspended or disabled.');
+        }
+
+        if (!$this->isAccountNonLocked()) {
+            throw AuthenticationException::of('The account is locked.');
+        }
+
+        if (!$this->isAccountNonExpired()) {
+            throw AuthenticationException::of('The account is expired.');
+        }
+
+        if (!$this->isCredentialsNonExpired()) {
+            throw AuthenticationException::of('The credential is expired.');
+        }
+
+        return $this;
     }
 }

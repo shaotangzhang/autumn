@@ -8,10 +8,17 @@ use Autumn\Database\Traits\RecyclableEntityManagerTrait;
 
 class User extends UserEntity implements RecyclableRepositoryInterface
 {
-    use RecyclableEntityManagerTrait;
+    use RecyclableEntityManagerTrait {
+        __model_class__ as __mc__;
+    }
 
     public function roles(): RepositoryInterface
     {
         return $this->manyToMany(UserRole::class);
+    }
+
+    protected function __model_class__(): string
+    {
+        return static::class;
     }
 }

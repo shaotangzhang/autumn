@@ -2,6 +2,7 @@
 
 namespace Autumn\System;
 
+use Autumn\App;
 use Autumn\Interfaces\ContextInterface;
 use Autumn\System\Requests\FormRequest;
 use Autumn\System\Requests\SubmissionHandler;
@@ -63,5 +64,24 @@ class Service implements ContextInterface, SubmissionHandler
         }
 
         throw new \InvalidArgumentException('Invalid form type for submission.');
+    }
+
+    public function dummy(string ...$args): mixed
+    {
+        if (env('DEBUG') && env('USE_DUMMY')) {
+            if (realpath($file = App::map('storage', 'dummy', 'data', ...$args) . '.php')) {
+                return include $file;
+            }
+        }
+        return null;
+    }
+
+    public function dummies(string ...$args): array
+    {
+        $data = $this->dummy(...$args);
+        if (is_array($data)) {
+            return $data;
+        }
+        return [];
     }
 }

@@ -2,10 +2,10 @@
 
 namespace Autumn\System;
 
-use Autumn\Exceptions\RedirectException;
 use Autumn\I18n\Translation;
 use Autumn\Interfaces\ArrayInterface;
 use Autumn\Interfaces\ContextInterface;
+use Autumn\System\Responses\JsonResponse;
 use Autumn\System\Responses\RedirectResponse;
 use Autumn\Traits\ArrayPropertiesTrait;
 use Autumn\Traits\ContextInterfaceTrait;
@@ -36,7 +36,9 @@ class Controller implements ContextInterface, ArrayInterface
             $lang ??= Translation::lang();
             $this->translation = new Translation($domain, $lang);
             foreach ($this->languageDomains as $language) {
-                $this->translation->merge(Translation::load($language, null, $lang));
+                if ($translations = Translation::load($language, null, $lang)) {
+                    $this->translation->merge($translations);
+                }
             }
             Translation::load($domain, null, $lang);
         }
@@ -59,5 +61,10 @@ class Controller implements ContextInterface, ArrayInterface
     protected function redirect(string $location, int $statusCode = null, string $reasonPhrase = null): RedirectResponse
     {
         return new RedirectResponse($location, $statusCode, $reasonPhrase);
+    }
+
+    protected function actionResult(string $action, mixed $result, array $context = null): array
+    {
+        return compact('action', 'result');
     }
 }

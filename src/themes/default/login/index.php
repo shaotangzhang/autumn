@@ -2,7 +2,7 @@
 /**
  * @layout
  */
-return function () { ?>
+return function (string $error = null, string $redirect = null) { ?>
 
     <style>
         .form-signin {
@@ -28,26 +28,35 @@ return function () { ?>
     </style>
 
     <form method="post" class="form-signin m-auto">
-        <h1 class="h3 mb-3 fw-normal"><?= t('Please sign in') ?></h1>
+        <input type="hidden" name="redirect" value="<?= attr($redirect) ?>">
+
+        <?php if ($error) : ?>
+            <div class="alert alert-danger" role="alert"><?= $error ?></div>
+        <?php endif; ?>
+
+        <h1 class="h3 mb-3 fw-normal"><?= t('login.title', 'Please sign in') ?></h1>
 
         <div class="form-floating">
             <input type="email" name="username" class="form-control" id="floatingInput"
                    placeholder="name@example.com">
-            <label for="floatingInput"><?= t('Email address') ?></label>
-        </div>
+            <label for="floatingInput"><?= t('labels.username', 'Email address') ?></label>
+        </div><?= t('labels.username', 'Username') ?>:
         <div class="form-floating">
             <input type="password" name="password" class="form-control" id="floatingPassword"
                    placeholder="Password">
-            <label for="floatingPassword"><?= t('Password') ?></label>
+            <label for="floatingPassword"><?= t('labels.password', 'Password') ?></label>
         </div>
 
-        <div class="checkbox mb-3">
-            <label>
-                <input type="checkbox" value="remember-me">
-                <?= t('Remember me') ?>
-            </label>
-        </div>
-        <button class="w-100 btn btn-lg btn-primary" type="submit"><?= t('Sign in') ?></button>
+        <?php if (env('USER_LOGIN_REMEMBER_ME')) : ?>
+            <div class="checkbox mb-3">
+                <label>
+                    <input type="checkbox" value="remember-me">
+                    <?= t('labels.remember_me', 'Remember me') ?>
+                </label>
+            </div>
+        <?php endif; ?>
+
+        <button class="w-100 btn btn-lg btn-primary" type="submit"><?= t('labels.submit', 'Sign in') ?></button>
     </form>
 
     <?php

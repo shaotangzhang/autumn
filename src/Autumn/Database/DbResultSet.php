@@ -123,10 +123,6 @@ class DbResultSet implements \IteratorAggregate, \Stringable
                     if (is_subclass_of($callback, Model::class, true)) {
                         return $callback::from($rs);
                     }
-
-                    if (class_exists($callback)) {
-                        return Reflection::createInstance($callback, $rs);
-                    }
                 }
             }
         }

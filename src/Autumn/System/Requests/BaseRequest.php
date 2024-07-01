@@ -17,6 +17,13 @@ abstract class BaseRequest implements \ArrayAccess
     protected array $rules = [];
 
     /**
+     * The default validation rules
+     *
+     * @var array
+     */
+    protected array $defaultRules = [];
+
+    /**
      * The default values
      *
      * @var array<string, mixed>
@@ -117,6 +124,11 @@ abstract class BaseRequest implements \ArrayAccess
         return $results;
     }
 
+    public function rules(): array
+    {
+        return array_merge($this->defaultRules, $this->rules);
+    }
+
     public function get(string $name, mixed $default = null): mixed
     {
         return $this->validateResult[$name] ?? $default;
@@ -136,6 +148,51 @@ abstract class BaseRequest implements \ArrayAccess
         $this->validateResult[$name] = $value;
     }
 
+    public function someOf(array $keys, bool $existingOnly = false): array
+    {
+        $data = [];
+        foreach ($keys as $alias => $key) {
+            $value = $this->get($alias) ?? $this->get($key);
+            if (!$existingOnly || $value !== null && $value !== '') {
+                $data[$key] = $value;
+            }
+        }
+        return $data;
+    }
+
+    public function some(string ...$keys): array
+    {
+        $data = [];
+        foreach ($keys as $key) {
+            $data[$key] = $this->get($key);
+        }
+        return $data;
+    }
+
+    public function any(string ...$keys): mixed
+    {
+        foreach ($keys as $key) {
+            $value = $this->get($key);
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    public function compact(string ...$keys): array
+    {
+        $data = [];
+        foreach ($keys as $key) {
+            $value = $this->get($key);
+            if ($value !== null && $value !== '') {
+                $data[$key] = $value;
+            }
+        }
+        return $data;
+    }
+
     /**
      * Validates input data against a set of rules and stores the results.
      *
@@ -147,7 +204,7 @@ abstract class BaseRequest implements \ArrayAccess
      */
     public function validate(array $rules = null): void
     {
-        $this->validateResult = $this->validateRules($rules ?? $this->rules, $this->fieldPrefix);
+        $this->validateResult = $this->validateRules($rules ?? $this->rules(), $this->fieldPrefix);
     }
 
     /**
@@ -423,6 +480,25 @@ abstract class BaseRequest implements \ArrayAccess
      */
     protected function ruleOfNumber(string $name, mixed $value): void
     {
+        $this->ruleOfNumeric($name, $value);
+    }
+
+
+    /**
+     * Validates that a value is numeric.
+     *
+     * This rule checks if the provided value is numeric, which includes integers,
+     * floats, and numeric strings.
+     *
+     *  For example:
+     *  $rule = 'numeric';
+     *
+     * @param string $name The name of the field being validated.
+     * @param mixed $value The value of the field being validated.
+     * @throws ValidationException if the value is not numeric.
+     */
+    protected function ruleOfNumeric(string $name, mixed $value): void
+    {
         if (!is_numeric($value)) {
             throw ValidationException::of('`%s` must be a numeric value.', $name);
         }
@@ -598,5 +674,22 @@ abstract class BaseRequest implements \ArrayAccess
     protected function ruleOfBoolean(string $name, mixed $value): void
     {
         $this->ruleOfBool($name, $value);
+    }
+
+    /**
+     * Validates that a value is the same as the other's.
+     *
+     * For example:
+     * $rule = 'same|password';
+     */
+    protected function ruleOfSame(string $name, mixed $value, mixed $field): void
+    {
+        $compare = $this->get($field);
+        if ($compare !== $value) {
+            throw ValidationException::of(
+                'The value of `%s` must be the same as that of `%s`.',
+                $field, $name
+            );
+        }
     }
 }

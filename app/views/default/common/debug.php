@@ -9,7 +9,7 @@ $histories = Db::histories();
 <p style="height: 2rem;"></p>
 <div class="card" style="position: fixed; bottom: 0; max-height: 40vh; width: 100%">
     <div class="card-header">
-    <a href="#debugPanel" data-bs-toggle="collapse" class="d-block">Debug</a>
+        <a href="#debugPanel" data-bs-toggle="collapse" class="d-block">Debug</a>
     </div>
     <div class="card-body collapse h-100 overflow-auto" id="debugPanel">
         <!-- 显示 PDO 执行记录 -->
@@ -61,6 +61,22 @@ $histories = Db::histories();
                         </td>
                     </tr>
                 <?php } ?>
+            <?php endforeach; ?>
+        </table>
+
+        <table class="table table-sm table-striped">
+            <tr>
+                <th>Session Key</th>
+                <th>Session Value</th>
+            </tr>
+
+            <?php foreach ($_SESSION ?? [] as $name => $value) : ?>
+                <tr>
+                    <td><?php echo HTML::encode($name); ?></td>
+                    <td>
+                        <pre><?php print_r($value); ?></pre>
+                    </td>
+                </tr>
             <?php endforeach; ?>
         </table>
     </div>

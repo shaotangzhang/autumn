@@ -17,7 +17,7 @@ trait RepositoryTrait
     use RepositoryContextPreparationTrait;
 
     #[Transient]
-    private readonly string $modelClass;
+    private string $modelClass = '';
 
     #[Transient]
     private ?DbConnection $connection;

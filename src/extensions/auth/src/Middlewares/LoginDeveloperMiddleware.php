@@ -16,16 +16,18 @@ class LoginDeveloperMiddleware implements MiddlewareInterface
     {
         $requiredRole = Role::DEVELOPER;
 
-        $roles = AuthService::context()->hasRoles($requiredRole);
-        if ($roles === null) {
-            return Response::forbidden('Access denied.');
-        }
-
-        if (!$roles) {
+        $session = AuthService::session();
+        if (!$session) {
             return Response::redirect('/login', [
                 'error' => 'Login is required.',
                 'redirect' => $request->getUri()->getPath()
             ]);
+        }
+
+        if (!in_array($requiredRole, $session->getAuthorities(), true)) {
+            if (!in_array(Role::SUPERVISOR, $session->getAuthorities(), true)) {
+                return Response::forbidden('Access denied.');
+            }
         }
 
         return $handler->handle($request);

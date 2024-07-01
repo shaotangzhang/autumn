@@ -8,6 +8,7 @@
 return [
     'auth', // default extension `auth`, import extension from DOC_ROOT . '/src/extensions/auth/src/extension.php'
     'cms',  // default extension `cms`, import extension from DOC_ROOT . '/src/extensions/cms/src/extension.php'
+    'shop', // default extension `shop`, import extension from DOC_ROOT . '/src/extensions/shop/src/extension.php'
 
     // Include here the entry file of other extensions.
     // Note: the entry file must return the class name of the importing Extension

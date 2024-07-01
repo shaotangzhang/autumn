@@ -38,7 +38,7 @@ trait EntityRepositoryTrait
 
     public function first(): ?static
     {
-        return $this->__affective_result__()?->fetch(static::class, Db::FETCH_DATA);
+        return $this->__affective_result__()?->fetch();
     }
 
     public function firstOrFail(string $messageOnNotFound = null): static

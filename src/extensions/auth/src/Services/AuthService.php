@@ -2,259 +2,255 @@
 
 namespace Autumn\Extensions\Auth\Services;
 
-use Autumn\Database\DbException;
-use Autumn\Database\Interfaces\RepositoryInterface;
-use Autumn\Exceptions\AccessDeniedException;
+use Autumn\Database\Db;
 use Autumn\Exceptions\AuthenticationException;
-use Autumn\Exceptions\ConflictException;
-use Autumn\Exceptions\ServerException;
-use Autumn\Exceptions\ValidationException;
-use Autumn\Extensions\Auth\Interfaces\UserDetailsInterface;
+use Autumn\Exceptions\SystemException;
+use Autumn\Extensions\Auth\Interfaces\CredentialInterface;
+use Autumn\Extensions\Auth\Models\Credentials\DefaultCredential;
 use Autumn\Extensions\Auth\Models\Role\Role;
-use Autumn\Extensions\Auth\Models\Session\SessionEntity;
 use Autumn\Extensions\Auth\Models\Session\UserSession;
 use Autumn\Extensions\Auth\Models\User\User;
 use Autumn\Extensions\Auth\Models\User\UserDetails;
 use Autumn\Extensions\Auth\Models\User\UserEntity;
 use Autumn\Extensions\Auth\Models\User\UserRole;
+use Autumn\System\Request;
 use Autumn\System\Session;
+use Psr\SimpleCache\InvalidArgumentException;
 
 class AuthService extends AbstractService
 {
-    private ?UserEntity $currentUser = null;
-    private ?UserDetailsInterface $currentUserDetails = null;
+    public const SESSION_DEFAULT_LIFETIME_IN_SECONDS = 86400 * 7;   // 7 Days
+    public const USER_SESSION_KEY = 'AUTH_USER_SESSION';
 
-    /**
-     * @return UserEntity|null
-     */
-    public function getCurrentUserInfo(): ?UserEntity
+    private false|UserSession|null $userSession = null;
+
+    public static function session(): ?UserSession
     {
-        return $this->currentUser ??= Session::get('Auth::userInfo');
-    }
-
-    /**
-     * @return UserDetailsInterface|null
-     */
-    public function getCurrentUserDetails(): ?UserDetailsInterface
-    {
-        return $this->currentUserDetails ??= Session::get('Auth::userDetails');
-    }
-
-    public function loadFromSession(): ?UserDetails
-    {
-        $userDetails = Session::get('Auth::userDetails');
-        if ($userDetails instanceof UserDetailsInterface) {
-            return $userDetails;
-        }
-
-        $userInfo = Session::get('Auth::userInfo');
-        if ($userInfo instanceof UserEntity) {
-            return UserDetails::fromUserEntity($userInfo);
+        try {
+            $session = Session::get(static::USER_SESSION_KEY);
+            if ($session instanceof UserSession) {
+                return $session;
+            }
+        } catch (InvalidArgumentException) {
         }
 
         return null;
     }
 
-    public function hasRoles(string ...$roles): ?array
+    /**
+     * Attempt to authenticate a user based on credentials.
+     *
+     * @param string $username
+     * @param string $password
+     * @return UserSession
+     */
+    public function authenticate(string $username, string $password): UserSession
     {
-        if ($userDetails = $this->currentUserDetails ??= $this->loadFromSession()) {
-
-            $has = array_intersect($roles, $userDetails->getAuthorities());
-            if (count($has)) {
-                return $has;
-            }
-
-            if (in_array(Role::SUPERVISOR, $userDetails->getAuthorities())) {
-                return $roles;
-            }
+        if ($this->isEmail($username)) {
+            $user = $this->loadUserByEmail($username);
+        } else {
+            $user = $this->loadUserByUsername($username);
         }
 
-        return null;
-    }
-
-
-    public function isLogin(): bool
-    {
-        return ($this->getCurrentUserDetails()?->getUsername() !== null)
-            || ($this->getCurrentUserInfo()?->getUsername() !== null);
-    }
-
-    public function logout(): void
-    {
-        $this->currentUser = $this->currentUserDetails = null;
-
-        Session::remove('Auth::userDetails');
-        Session::remove('Auth::userInfo');
-    }
-
-    public function login(string $username, string $password): UserDetailsInterface
-    {
-        $field = str_contains($username, '@') ? 'email' : 'username';
-
-        $user = User::findBy([$field => $username])->withoutTrashed()->first();
-
-        if (!$user || !$this->comparePassword($password, $user->getPassword())) {
+        if (!$user || !$this->verifyUserPassword($password, $user)) {
             throw AuthenticationException::of('Invalid username or password.');
         }
 
-        $this->logout();
-        return $this->loginUserInfo($user);
+        $session = $this->createSession($user);
+        try {
+            Session::set(static::USER_SESSION_KEY, $session);
+        } catch (InvalidArgumentException $ex) {
+            throw SystemException::of('Failed to store the user session.', $ex);
+        }
+        return $session;
     }
 
-    public function loginUserInfo(UserEntity $user): UserDetailsInterface
+    public function createSession(UserEntity $user): UserSession
     {
-        $userDetails = UserDetails::fromUserEntity($user);
+        $userDetails = UserDetails::fromUserEntity($user)->verify();
 
-        if (!$userDetails->isAccountNonLocked()) {
-            throw AuthenticationException::of('Account is locked.');
-        }
+        $userId = $user->getId();
 
-        if (!$userDetails->isAccountNonExpired()) {
-            throw AuthenticationException::of('Account is expired.');
-        }
+        $session = new UserSession;
+        $session->setUserId($userId);
+        $session->setProfile($user);
+        $session->setIp(Request::realIPv4() ?? '127.0.0.1');
+        $session->setUserDetails($userDetails);
+        $session->setPreferences($this->loadUserPreferences($userId));
 
-        if (!$userDetails->isEnabled()) {
-            throw AuthenticationException::of('Account is not ready yet.');
-        }
+        $query = $this->loadUserRoles($userId);
 
-        $list = [];
-        if ($user->getId() === 1) {
-            $list = [Role::SUPERVISOR, Role::ADMIN];
-        } else {
-            foreach ($this->getUserPermissions($user) as $index => $item) {
-                $list[$index] = $item['name'];
+        $roles = [];
+        // if ($userId === 1) {
+        //     $authorities = [Role::SUPERVISOR];
+        //     $roles = [Role::supervisor()];
+        // } else {
+            $authorities = $userDetails->getAuthorities();
+            foreach ($query as $role) {
+                $roles[] = $role;
+                $authorities[] = $role->getName();
             }
-        }
+        // }
+        $userDetails->setAuthorities($authorities);
+        $session->setRoles($roles);
 
-        $requiredAuthorities = env('AUTH_REQUIRED_AUTHORITIES');
-        if (is_string($requiredAuthorities)) {
-            $requiredAuthorities = [$requiredAuthorities];
-        } elseif (!is_array($requiredAuthorities)) {
-            $requiredAuthorities = [];
-        }
-        if (array_diff($requiredAuthorities, $list)) {
-            throw new AccessDeniedException;
-        }
+        $token = $this->createAuthToken($session);
+        $session->setSessionExpiration($token['expires']);
+        $session->setAuthToken($token['token']);
+        $session->setSessionId(md5(serialize($token)));
 
-        $userDetails->setAuthorities($list);
-
-        Session::set('Auth::userInfo', $this->currentUser = $user);
-        return $this->loginUserDetails($userDetails);
+        return $session;
     }
 
-    public function loginUserDetails(UserDetailsInterface $userDetails): UserDetailsInterface
+    public function createAuthToken(UserSession $session): array
     {
-        Session::set('Auth::userDetails', $this->currentUserDetails = $userDetails);
-        return $userDetails;
+        $expires = time() + $this->getSessionLifetime();
+        try {
+            $randomBytes = random_bytes(16); // 16 bytes will generate a 32-character hex string
+            $token = bin2hex($randomBytes);
+        } catch (\Exception) {
+            $token = md5(serialize($session) . microtime());
+        }
+        return compact('token', 'expires');
     }
 
     /**
-     * @param string $email
-     * @param string $password
-     * @return UserDetailsInterface
-     * @throws ServerException
+     * @param string $token
+     * @return UserSession|null
+     * @throws \Throwable
      */
-    public function register(string $email, string $password): UserDetailsInterface
+    public function refreshAuthToken(string $token): ?UserSession
     {
-        if (!str_contains($email, '@')) {
-            throw ValidationException::of('Invalid email format.');
-        }
+        return Db::transaction(function () use ($token) {
+            // Load the session based on the provided token
+            $session = $this->loadSessionByToken($token);
+            if (!$session) {
+                return null; // Return null if session with the token is not found
+            }
 
-        if (User::find(['email' => $email])) {
-            throw ValidationException::of('The email "%s" is in use.', $email);
-        }
+            // Create a new authentication token and update session details
+            $newToken = $this->createAuthToken($session);
+            $session->setSessionExpiration($newToken['expires']);
+            $session->setAuthToken($newToken['token']);
 
-        $username = substr(explode('@', $email)[0], 0, 4)
-            . substr(md5($email), 0, 8);
+            // Update the session in the database
+            UserSession::update($session, [
+                'sid' => $session->getAuthToken(),
+                'deleted_at' => $session->getSessionExpiration()
+            ]);
 
-        $user = User::create([
-            'email' => $email,
-            'username' => $username,
-            'password' => $this->encryptPassword($password),
-            'status' => User::defaultStatus()
-        ]);
-
-        if (!$user) {
-            throw ConflictException::of('Unable to register a user at the moment.');
-        }
-
-        $this->logout();
-        return $this->loginUserDetails(UserDetails::fromUserEntity($user));
+            return $session; // Return the updated session
+        }, UserSession::class); // Specify the connection for the transaction
     }
 
-    public function comparePassword(string $password, string $hash): bool
+    public function loadSessionByToken(string $token): ?UserSession
     {
-        if (str_starts_with($hash, '{bcrypt}')) {
-            $hash = substr($hash, 8);
+        return UserSession::findBy(['sid' => $token])->withoutTrashed()->first();
+    }
+
+    public function getSessionLifetime(): int
+    {
+        // Retrieve lifetime from environment variable AUTH_SESSION_LIFETIME
+        $lifetime = filter_var(env('AUTH_SESSION_LIFETIME'), FILTER_VALIDATE_INT, FILTER_NULL_ON_FAILURE);
+
+        // Check if the retrieved lifetime is valid and greater than zero
+        if ($lifetime > 0) {
+            return $lifetime;
         }
 
-        return password_verify($password, $hash);
+        // If lifetime is not valid or not provided, return default lifetime
+        return static::SESSION_DEFAULT_LIFETIME_IN_SECONDS;
     }
 
-    public function encryptPassword(string $password): string
+    public function isEmail(string $text): bool
     {
-        return '{bcrypt}' . password_hash($password, PASSWORD_DEFAULT);
+        return str_contains($text, '@');
     }
 
-    public function getUserPermissions(UserEntity $user): RepositoryInterface
+    public function verifyUserPassword(string $password, string|UserEntity $compare): bool
+    {
+        if (!is_string($compare)) {
+            $compare = $compare->getPassword();
+        }
+
+        return password_verify($password, $compare);
+    }
+
+    public function loadUserByEmail(string $email): ?User
+    {
+        return User::findBy(['email' => $email])->withoutTrashed()->first();
+    }
+
+    public function loadUserByUsername(string $username): ?User
+    {
+        return User::findBy(['username' => $username])->withoutTrashed()->first();
+    }
+
+    /**
+     * @param int $userId
+     * @return Role[]
+     */
+    public function loadUserRoles(int $userId): iterable
     {
         return Role::repository()
-            ->alias('R')
+            ->alias('PRI')
             ->withoutTrashed()
-            ->innerJoin(UserRole::class . ' AS UR', 'UR.role_id', 'R.id')
-            ->where('UR.' . UserRole::relation_secondary_column(), '=', $user->getId())
-            ->select('R.*');
+            ->innerJoin(UserRole::class . ' AS R', 'PRI.id', 'R.role_id')
+            ->and('R.user_id', $userId);
+    }
+
+    public function loadUserPreferences(int $userId): array
+    {
+        // implements later
+        return [];
     }
 
     /**
-     * @throws ServerException
+     * @return UserSession|null
      */
-    public function createSession(UserEntity $user, string $remoteIP, int|float|string|\DateTimeInterface $expires): SessionEntity
+    public function getUserSession(): ?UserSession
     {
-        $token = md5(serialize($data = [$user->getUsername(), $remoteIP, $expires]));
-
-        return UserSession::create([
-            'userId' => $user->getId(),
-            'sessionId' => $token,
-            'ip' => $remoteIP,
-            'expiredAt' => $expires,
-        ]);
+        return ($this->userSession ??= (static::session() ?? false)) ?: null;
     }
 
     /**
-     * @throws ServerException
-     * @throws DbException
+     * Check if a user is currently authenticated.
+     *
+     * @return bool
      */
-    public function updateSession(string $token, mixed $data): SessionEntity|false|null
+    public function isAuthenticated(): bool
     {
-        $session = UserSession::find(['token' => $token]);
+        return $this->getUserSession() !== null;
+    }
 
-        if ($session === null) {
-            return null;
+    public function login(UserSession $session): CredentialInterface
+    {
+        $this->userSession = $session;
+        try {
+            Session::set(static::USER_SESSION_KEY, $session);
+            return $this->createCredential($session);
+        } catch (InvalidArgumentException $ex) {
+            throw SystemException::of('Failed to store the user session.', $ex);
         }
-
-        if ($session->isExpired()) {
-            return false;
-        }
-
-        return UserSession::update($session, ['data' => serialize($data)]);
     }
 
     /**
-     * @throws DbException
+     * Logout the current user.
      */
-    public function deleteSession(string $token): ?bool
+    public function logout(): void
     {
-        $session = UserSession::find(['token' => $token]);
-
-        if ($session === null) {
-            return null;
+        try {
+            $this->getUserSession();
+            $this->userSession = null;
+            Session::delete(static::USER_SESSION_KEY);
+            Session::close();
+        } catch (InvalidArgumentException $ex) {
+            throw SystemException::of('Failed to destroy the user session.', $ex);
         }
+    }
 
-        if ($session->isExpired()) {
-            return false;
-        }
-
-        return UserSession::delete($session);
+    public function createCredential(UserSession $session): CredentialInterface
+    {
+        return DefaultCredential::fromUserSession($session);
     }
 }

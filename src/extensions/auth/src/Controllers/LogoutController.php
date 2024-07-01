@@ -1,26 +1,25 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        9/05/2024
- */
 
 namespace Autumn\Extensions\Auth\Controllers;
 
+use Autumn\System\Responses\RedirectResponse;
+
 class LogoutController extends AbstractController
 {
+    public const METHOD_POST = 'logout';
+
     protected string $viewPath = 'login/';
 
-    public function index(?string $redirect): mixed
-    {
-        $this->set('title', 'Logout');
-        return $this->view('logout', ['redirect' => $redirect]);
-    }
-
-    public function post(?string $redirect): mixed
+    public function index(string $redirect = null): RedirectResponse
     {
         $this->getAuthService()->logout();
 
-        return $this->redirect($redirect ?: '/');
+        return $this->redirect($redirect ?: '/login');
+    }
+
+    public function logout(): array
+    {
+        $this->getAuthService()->logout();
+        return $this->actionResult(__FUNCTION__, true);
     }
 }

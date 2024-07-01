@@ -532,7 +532,7 @@ class Route implements RequestHandlerInterface, ParameterResolverInterface
         }
 
         if (is_string($this->callback)) {
-            [$class, $action] = explode('@', $this->callback . '@', 2);
+            [$class, $action] = explode('@', $this->callback.'@');
 
             if (is_subclass_of($class, Controller::class)) {
                 if (!$action) {

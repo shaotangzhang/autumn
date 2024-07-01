@@ -21,7 +21,7 @@
 
 <?php $this->slot('top'); ?>
 
-<header class="border-bottom"><?php $this->slot('header'); ?></header>
+<?php $this->slot('header'); ?>
 
 <?php $this->slot('sidebar'); ?>
 
@@ -41,7 +41,7 @@
 
 <?php $this->slot('endbar'); ?>
 
-<footer><?php $this->slot('footer'); ?></footer>
+<?php $this->slot('footer'); ?>
 
 <?php $this->slot('bottom'); ?>
 
@@ -52,6 +52,6 @@
 <?php $this->slot('scripts'); ?>
 <?php $this->slot('foot'); ?>
 
-<?php env('DEBUG') && include __DIR__ . '/debug.php'?>
+<?php env('DEBUG') && include __DIR__ . '/debug.php' ?>
 </body>
 </html>

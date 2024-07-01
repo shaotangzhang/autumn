@@ -1,20 +1,18 @@
 <?php
-/**
- * Autumn PHP Framework
- *
- * Date:        18/06/2024
- */
 
 namespace Autumn\System\Requests;
 
 class QueryRequest extends BaseRequest
 {
-    protected array $defaults = [
-        'limit' => 0
+    protected array $defaultRules = [
+        'limit' => 'integer|min:1|max:100',
+        'page' => 'integer|min:1',
+        'desc' => 'string|in:asc,desc,true,false,1,0',
+        'search' => 'string',
+        'q' => 'string',
     ];
 
     protected array $rules = [
-        'limit' => 'min:0'
     ];
 
     /**
@@ -39,7 +37,7 @@ class QueryRequest extends BaseRequest
     {
         $result = [];
 
-        foreach ($rules ?? $this->rules as $name => $rule) {
+        foreach ($rules ?? $this->rules() as $name => $rule) {
             try {
                 $value = $this->fetchWithRule($name, $rule);
                 $result[$name] = $value;

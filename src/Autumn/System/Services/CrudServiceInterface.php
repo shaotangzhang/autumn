@@ -70,7 +70,7 @@ interface CrudServiceInterface extends ServiceInterface
     public function getList(array $context = null): RepositoryInterface;
 
     /**
-     * Queries for a single entity by its ID.
+     * Requests for a single entity by its ID.
      *
      * @param int $id The ID of the entity to query.
      * @param array|null $context Optional context for additional query parameters.

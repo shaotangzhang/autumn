@@ -9,6 +9,8 @@ use Autumn\Exceptions\UnauthorizedException;
 use Autumn\Exceptions\ValidationException;
 use Autumn\Interfaces\ContextInterface;
 use Autumn\Interfaces\SingletonInterface;
+use Autumn\Logging\ConsoleLogger;
+use Autumn\System\Controller;
 
 /**
  * ServiceContainer implements a simple dependency injection container with support for bindings,
@@ -24,7 +26,8 @@ class ServiceContainer implements ServiceContainerInterface
 
     public static function defaultParameterResolver(): ParameterResolverInterface
     {
-        return ParameterResolver::context();
+        static $g;
+        return $g ??= new ParameterResolver;
     }
 
     /**
@@ -81,6 +84,8 @@ class ServiceContainer implements ServiceContainerInterface
      */
     public function factory(string $abstract, array $args = null, array $context = null, \Throwable &$error = null): mixed
     {
+        static $missingClasses = [];
+
         // Return existing shared instance if already created
         if (isset($this->sharedInstances[$abstract])) {
             return $this->sharedInstances[$abstract];
@@ -89,6 +94,11 @@ class ServiceContainer implements ServiceContainerInterface
         // Return temporary instance if it exists during injection process
         if (isset($this->instancesDuringInjection[$abstract])) {
             return $this->instancesDuringInjection[$abstract];
+        }
+
+        if (in_array($abstract, $missingClasses, true)) {
+            (new ConsoleLogger)->info($abstract);
+            return null;
         }
 
         // Handle singleton classes
@@ -103,8 +113,11 @@ class ServiceContainer implements ServiceContainerInterface
 
         // Resolve binding for the abstract class
         if ($binding = $this->abstractBindings[$abstract] ?? null) {
-            $bindingContext = $this->contexts[$abstract] ?? $context;
-            return $this->abstractBindings[$abstract] = $this->factory($binding, $args, $bindingContext);
+            // Check if the binding is the same as the $abstract. !important!
+            if ($binding !== $abstract) {
+                $bindingContext = $this->contexts[$abstract] ?? $context;
+                return $this->abstractBindings[$abstract] = $this->factory($binding, $args, $bindingContext);
+            }
         }
 
         // Handle callable bindings (factories)
@@ -128,6 +141,7 @@ class ServiceContainer implements ServiceContainerInterface
         } catch (\ReflectionException $ex) {
             // Capture and return the exception for error handling
             $error = $ex;
+            $missingClasses[] = $abstract;
             return null;
         }
     }
@@ -151,48 +165,48 @@ class ServiceContainer implements ServiceContainerInterface
 
         return $result;
 
-//
-//        if (isset($this->instances[$abstract])) {
-//            return $this->instances[$abstract];
-//        }
-//
-//        if (isset($this->temporaries[$abstract])) {
-//            return $this->temporaries[$abstract];
-//        }
-//
-//        // Check if the abstract class implements SingletonInterface
-//        if (is_subclass_of($abstract, SingletonInterface::class)) {
-//            return $abstract::getInstance();
-//        }
-//
-//        if (is_subclass_of($abstract, ContextInterface::class)) {
-//            return $abstract::context();
-//        }
-//
-//        // Fetch the binding for the abstract
-//        $binding = $this->bindings[$abstract] ?? null;
-//        if (!$binding) {
-//            throw new \RuntimeException("Class '$abstract' is not bound.");
-//        }
-//
-//        // Handle callable bindings (factories)
-//        if (is_callable($binding)) {
-//            return $this->instances[$abstract] = $this->invoke($binding, [], $this->contexts[$abstract] ?? []);
-//        }
-//
-//        static $useClassDecoratorProxy;
-//        if ($useClassDecoratorProxy ??= env('USE_CLASS_DECORATOR_PROXY')) {
-//            if (($binding = DecoratorProxy::createProxyClass($abstract))) {
-//                $this->bindings[$abstract] = $binding;
-//            }
-//        }
-//
-//        // Create a new instance of the concrete class
-//        try {
-//            return $this->instances[$abstract] = $this->createInstance($binding);
-//        } catch (\ReflectionException $ex) {
-//            throw new \RuntimeException("Failed to instantiate service '$abstract'.", E_ERROR, $ex);
-//        }
+        //
+        //        if (isset($this->instances[$abstract])) {
+        //            return $this->instances[$abstract];
+        //        }
+        //
+        //        if (isset($this->temporaries[$abstract])) {
+        //            return $this->temporaries[$abstract];
+        //        }
+        //
+        //        // Check if the abstract class implements SingletonInterface
+        //        if (is_subclass_of($abstract, SingletonInterface::class)) {
+        //            return $abstract::getInstance();
+        //        }
+        //
+        //        if (is_subclass_of($abstract, ContextInterface::class)) {
+        //            return $abstract::context();
+        //        }
+        //
+        //        // Fetch the binding for the abstract
+        //        $binding = $this->bindings[$abstract] ?? null;
+        //        if (!$binding) {
+        //            throw new \RuntimeException("Class '$abstract' is not bound.");
+        //        }
+        //
+        //        // Handle callable bindings (factories)
+        //        if (is_callable($binding)) {
+        //            return $this->instances[$abstract] = $this->invoke($binding, [], $this->contexts[$abstract] ?? []);
+        //        }
+        //
+        //        static $useClassDecoratorProxy;
+        //        if ($useClassDecoratorProxy ??= env('USE_CLASS_DECORATOR_PROXY')) {
+        //            if (($binding = DecoratorProxy::createProxyClass($abstract))) {
+        //                $this->bindings[$abstract] = $binding;
+        //            }
+        //        }
+        //
+        //        // Create a new instance of the concrete class
+        //        try {
+        //            return $this->instances[$abstract] = $this->createInstance($binding);
+        //        } catch (\ReflectionException $ex) {
+        //            throw new \RuntimeException("Failed to instantiate service '$abstract'.", E_ERROR, $ex);
+        //        }
     }
 
     /**

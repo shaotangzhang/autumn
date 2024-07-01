@@ -35,12 +35,6 @@ class Cms extends Extension
         Auth::class
     ];
 
-    /**
-     * List of required middlewares that should be applied to the application.
-     * Example: ['auth', 'csrf']
-     */
-    public const REQUIRED_MIDDLEWARES = ['auth', 'csrf'];
-
     public const REGISTERED_ENTITIES = [
         Page::class,
 

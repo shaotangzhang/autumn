@@ -47,7 +47,7 @@ class ParameterResolver extends Service implements ParameterResolverInterface
 
             foreach ($this->resolvers as $resolver) {
                 if (is_string($resolver)) {
-                    $resolver = make($resolver, true);
+                    $resolver = new $resolver;
                 }
 
                 if ($resolver instanceof ParameterResolverInterface) {

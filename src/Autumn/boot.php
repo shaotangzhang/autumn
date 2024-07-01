@@ -211,8 +211,19 @@ if (!function_exists('component')) {
      */
     function component(string $name, array $attributes = null, array $context = null, mixed ...$children): ?Component
     {
+        $slots = $context['use_slots'] ?? null;
+        unset($context['use_slots']);
+
         $viewName = strtr($name, ['\\' => '/', '.' => '/', '::' => '/', ':' => '/', '//' => '/']);
-        $view = new View('/component/' . $viewName);
+        $view = new View('/component/' . $viewName, $context);
+
+        if (is_array($slots)) {
+            foreach ($slots as $slot => $definition) {
+                if (is_callable($definition)) {
+                    $view->defineSlot($slot, $definition);
+                }
+            }
+        }
 
         $component = new Component($context['tagName'] ?? strtr($name, '/', '-'), $attributes, $context, ...$children);
         $component->setView($view);

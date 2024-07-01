@@ -40,6 +40,7 @@ Thumbs.db
 # 公开目录下的自动生成文件夹
 /public/thumb/
 /public/upload/
+/public/theme/
 
 # 忽略数据库备份文件
 *.sql

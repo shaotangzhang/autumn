@@ -11,6 +11,7 @@ use Autumn\Database\Traits\TypeColumnTrait;
 use Autumn\Extensions\Auth\Traits\EmailColumnTrait;
 use Autumn\Extensions\Auth\Traits\PasswordColumnTrait;
 use Autumn\Extensions\Auth\Traits\UsernameColumnTrait;
+use Autumn\Extensions\Cms\Models\Traits\NicknameColumnTrait;
 
 #[Index(Index::DEFAULT_UNIQUE_NAME, Index::UNIQUE, 'username')]
 class UserEntity extends RecyclableEntity implements Expirable
@@ -18,6 +19,7 @@ class UserEntity extends RecyclableEntity implements Expirable
     use UsernameColumnTrait;
     use PasswordColumnTrait;
     use EmailColumnTrait;
+    use NicknameColumnTrait;
     use TypeColumnTrait;
     use StatusColumnTrait;
     use ExpirableTrait;

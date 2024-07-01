@@ -30,9 +30,9 @@ class Translation implements \IteratorAggregate
      * @param string $domain The translation domain to load.
      * @param string|null $prefix An optional prefix to add to keys.
      * @param string|null $lang The language code (optional). If not provided, uses the default language.
-     * @return static Returns a Translation instance with loaded translations.
+     * @return Translation|null Returns a Translation instance with loaded translations.
      */
-    public static function load(string $domain, string $prefix = null, string $lang = null): static
+    public static function load(string $domain, string $prefix = null, string $lang = null): ?static
     {
         // Determine language to use
         $lang ??= static::lang();
@@ -43,21 +43,23 @@ class Translation implements \IteratorAggregate
             self::$translations[$lang][$domain] = [];
 
             // Attempt to load translations from a language file
-            if (realpath($file = App::context()->getLanguageFile($domain, $lang))) {
-                // Parse the language file (assuming it's in INI format)
-                $data = parse_ini_file($file, true);
+            if (!realpath($file = App::context()->getLanguageFile($domain, $lang))) {
+                return null;
+            }
 
-                // If data is iterable (translations found in the file)
-                if (is_iterable($data)) {
-                    // Create a temporary Translation instance for merging data
-                    $temp = new static($domain, $lang);
-                    $temp->merge($data); // Merge parsed translations into the temporary instance
-                    self::$translations[$lang][$domain] = $temp->messages; // Store merged translations
+            // Parse the language file (assuming it's in INI format)
+            $data = parse_ini_file($file, true);
 
-                    // If no prefix is specified, return the temporary instance
-                    if (!$prefix) {
-                        return $temp;
-                    }
+            // If data is iterable (translations found in the file)
+            if (is_iterable($data)) {
+                // Create a temporary Translation instance for merging data
+                $temp = new static($domain, $lang);
+                $temp->merge($data); // Merge parsed translations into the temporary instance
+                self::$translations[$lang][$domain] = $temp->messages; // Store merged translations
+
+                // If no prefix is specified, return the temporary instance
+                if (!$prefix) {
+                    return $temp;
                 }
             }
         }

@@ -16,6 +16,13 @@ class Role extends RoleEntity implements RecyclableRepositoryInterface
     public const DEVELOPER = 'developer';
     public const SUPERVISOR = 'supervisor';
 
+    public static function supervisor(): static
+    {
+        static $supervisor;
+
+        return $supervisor ??= static::findOrNew(['name' => 'supervisor']);
+    }
+
     public function users(): RepositoryInterface
     {
         return $this->manyToMany(UserRole::class);

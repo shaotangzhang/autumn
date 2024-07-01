@@ -174,6 +174,22 @@ $histories = Db::histories(); // 假设 Db::histories() 方法可以获取 PDO �
             <?php } ?>
         <?php endforeach; ?>
     </table>
+
+    <table class="table table-sm table-striped">
+        <tr>
+            <th>Session Key</th>
+            <th>Session Value</th>
+        </tr>
+
+        <?php foreach ($_SESSION ?? [] as $name => $value) : ?>
+            <tr>
+                <td><?php echo HTML::encode($name); ?></td>
+                <td>
+                    <pre><?php print_r($value); ?></pre>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+    </table>
 </div>
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>

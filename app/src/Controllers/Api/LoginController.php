@@ -26,7 +26,7 @@ class LoginController extends Controller
      */
     public function getAuthService(): ?AuthService
     {
-        return $this->authService ??= app(AuthService::class);
+        return $this->authService ??= make(AuthService::class);
     }
 
     public function login(string $username, string $password): array

@@ -11,7 +11,8 @@ use App\Providers\AppServiceProvider;
 use Autumn\Database\DatabaseServiceProvider;
 use Autumn\System\Response;
 use Autumn\System\Responses\ResponseService;
-use Autumn\System\Session;
+
+include_once __DIR__ . '/functions.php';
 
 class Application extends \Autumn\System\Application
 {

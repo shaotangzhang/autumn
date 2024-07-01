@@ -156,9 +156,10 @@ class View implements ArrayInterface, Renderable, \ArrayAccess, Translatable
         $this->context['use_imports'][$type][$src] = $context;
     }
 
-    public function defineSlot(string $slot, callable $definition): void
+    public function defineSlot(string $slot, callable $definition): static
     {
         $this->slots[strtolower($slot)][] = $definition;
+        return $this;
     }
 
     public function slot(string $slot, array $args = null, array $context = null): void

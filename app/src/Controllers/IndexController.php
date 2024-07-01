@@ -2,17 +2,21 @@
 
 namespace App\Controllers;
 
-use Autumn\System\Controller;
-use Autumn\System\Request;
-
-class IndexController extends Controller
+class IndexController extends AbstractController
 {
-    public function index(?string $name, Request $request): mixed
+    protected array $languageDomains = ['home'];
+
+    protected string $viewPath = '/home/';
+
+    public function index(): mixed
     {
-        $this->loadLang('home');
+        $page = $this->getPageService()->getHomePage();
+        $args = $page?->toArray() ?? [];
 
-        $this->set('title', 'Hello');
+        $args['banners'] = $this->getPageService()?->getBanners('home') ?? [];
+        $args['products'] = $this->getProductService()?->getFeatured() ?? [];
+        $args['categories'] = $this->getProductService()?->getCategories() ?? [];
 
-        return $this->view('home/index', $request->toArray());
+        return $this->view('index', $args);
     }
 }

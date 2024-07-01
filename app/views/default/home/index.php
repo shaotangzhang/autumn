@@ -3,11 +3,9 @@
 /**
  * @layout
  */
-return function () { ?>
-
-    <h1><?= t('welcome_message', $this->name) ?></h1>
-
-    <p><?= $this->title ?></p>
-    <?php
+return function (iterable $banners = [], iterable $products = [], $categories = []) {
+    (include __DIR__ . '/carousel.php')($banners);
+    (include __DIR__ . '/featured-products.php')($products);
+    (include __DIR__ . '/categories.php')($categories);
 };
 

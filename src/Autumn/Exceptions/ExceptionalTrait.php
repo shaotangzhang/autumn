@@ -34,6 +34,13 @@ trait ExceptionalTrait
         $class = $message['class'] ?? static::class;
         $error = $message['message'] ?? '';
 
+        $last = end($args);
+        if ($last instanceof \Throwable) {
+            array_pop($args);
+        } else {
+            $last = null;
+        }
+
         static $classExisted;
         if ($classExisted ??= class_exists(Locale::class)) {
             $error = Locale::translate($error, $args, $message['domain'] ?? $_ENV['ERROR_DEFAULT_DOMAIN'] ?? '');
@@ -41,7 +48,7 @@ trait ExceptionalTrait
             $error = $args ? sprintf($error, ...$args) : $error;
         }
 
-        return new $class($error, intval($message['code'] ?? $_ENV['ERROR_DEFAULT_CODE'] ?? E_USER_ERROR));
+        return new $class($error, intval($message['code'] ?? $_ENV['ERROR_DEFAULT_CODE'] ?? E_USER_ERROR), $last);
     }
 
     public function prepareResponse(ResponseInterface $response): ResponseInterface
